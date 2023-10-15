@@ -1,0 +1,12 @@
+MANIFEST.in
+README.md
+setup.cfg
+setup.py
+tikapi/__init__.py
+tikapi/api.py
+tikapi.egg-info/PKG-INFO
+tikapi.egg-info/SOURCES.txt
+tikapi.egg-info/dependency_links.txt
+tikapi.egg-info/not-zip-safe
+tikapi.egg-info/requires.txt
+tikapi.egg-info/top_level.txt
