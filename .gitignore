@@ -1,9 +1,9 @@
 TikTokDownloaderVenv/
 Testing/
 Dockerfile
-currenct_videos.txt
-deleted_videos.txt
 downloaded_automatically.txt
 downloaded_manually.txt
-last.txt
 sound_id.txt
+current_videos.txt
+last.txt
+deleted_videos.txt
