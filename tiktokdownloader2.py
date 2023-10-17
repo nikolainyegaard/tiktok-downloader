@@ -21,7 +21,7 @@ async def GetVideosFromSound():
         await api.create_sessions(ms_tokens=[ms_token], num_sessions=1, sleep_after=3)
         video_array = []
         print(f"[{datetime.now().strftime('%H:%M:%S')}] Fetching videos from sound {sound_id}...")
-        async for video in api.sound(id=sound_id).videos(count=2000):
+        async for video in api.sound(id=sound_id).videos(count=3000):
             video_array.append(video.id)
             with open('current_videos.txt', 'a') as file:
                 file.write(video.id + '\n')
