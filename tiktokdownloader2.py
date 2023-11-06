@@ -17,10 +17,10 @@ async def GetVideosFromSound():
         pass
     async with TikTokApi() as api:
         print('[START]')
-        print(f"[{datetime.now().strftime('%H:%M:%S')}] Creating API session. Please wait...")
+        print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Creating API session. Please wait...")
         await api.create_sessions(ms_tokens=[ms_token], num_sessions=1, sleep_after=3)
         video_array = []
-        print(f"[{datetime.now().strftime('%H:%M:%S')}] Fetching videos from sound {sound_id}...")
+        print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Fetching videos from sound {sound_id}...")
         async for video in api.sound(id=sound_id).videos(count=3000):
             video_array.append(video.id)
             with open('current_videos.txt', 'a') as file:
@@ -41,15 +41,15 @@ async def GetVideosInfo(new_videos):
             try:
                 video_info = await video.info()
                 video_array.append(video_info)
-                print(f"[{datetime.now().strftime('%H:%M:%S')}] Processed {counter} of {total_videos}")
+                print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Processed {counter} of {total_videos}")
             except:
-                print(f"[{datetime.now().strftime('%H:%M:%S')}] Error with video {video_url}")
-    print(f"[{datetime.now().strftime('%H:%M:%S')}] Successfully fetched {len(video_array)} out of {len(new_videos)} videos.")
+                print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Error with video {video_url}")
+    print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Successfully fetched {len(video_array)} out of {len(new_videos)} videos.")
     return video_array
 
 
 def CheckDeletedVideos(video_count):
-    timestamp = datetime.now().strftime('%H:%M:%S')
+    timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
     counter = 0
     append_videos = []
 
@@ -97,25 +97,25 @@ def DownloadVideo(author_folder, video_id, authorName):
     for attempt in range(max_retries):
         for download_service in download_services:
             try:
-                print(f"\n[{datetime.now().strftime('%H:%M:%S')}] Downloading video {video_id} from @{authorName} using {download_service.__name__}...")
+                print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Downloading video {video_id} from @{authorName} using {download_service.__name__}...")
                 video_data = time_limited_request(video_url, download_service, timeout_seconds)
                 try:
                     video_data[0].download(os.path.join(author_folder, f"{video_id}.mp4"))
                 except:
-                    print(f"[{datetime.now().strftime('%H:%M:%S')}] Index error")
+                    print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Index error")
                     return
-                print(f"[{datetime.now().strftime('%H:%M:%S')}] Download successful!")
+                print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Download successful!\n")
                 return
             except (RequestException, TimeoutError) as e:
-                print(f"[{datetime.now().strftime('%H:%M:%S')}] Failed using {download_service.__name__}: {str(e)}")
-                print(f"[{datetime.now().strftime('%H:%M:%S')}] Trying next service...")
+                print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Failed using {download_service.__name__}: {str(e)}")
+                print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Trying next service...")
         
         if attempt < max_retries - 1:
             sleep_time = 2 ** attempt
-            print(f"[{datetime.now().strftime('%H:%M:%S')}] All services failed. Retrying all services in {sleep_time} seconds...")
+            print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] All services failed. Retrying all services in {sleep_time} seconds...")
             time.sleep(sleep_time)
     
-    print(f"[{datetime.now().strftime('%H:%M:%S')}] Failed to download after several attempts with all services.")
+    print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Failed to download after several attempts with all services.")
     return
 
 
@@ -177,7 +177,7 @@ def Main():
     video_ids = asyncio.run(GetVideosFromSound())
     ratelimit = EvaluateRatelimit(len(video_ids))
     deleted_response = CheckDeletedVideos(len(video_ids))
-    print(f"[{datetime.now().strftime('%H:%M:%S')}] Total videos fetched: {len(video_ids)}")
+    print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Total videos fetched: {len(video_ids)}")
     with open('last.txt', 'a') as file:
         file.write('\n' + str(len(video_ids)))
     with open('downloaded_automatically.txt', 'r') as file:
@@ -189,11 +189,11 @@ def Main():
         if video_id not in downloaded_automatically and video_id not in downloaded_manually:
             new_videos.append(video_id)
     if len(new_videos) == 0:
-        print(f"[{datetime.now().strftime('%H:%M:%S')}] No new videos found.")
+        print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] No new videos found.")
         print(deleted_response)
         return ratelimit
     else:
-        print(f"[{datetime.now().strftime('%H:%M:%S')}] New videos found: {len(new_videos)}")
+        print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] New videos found: {len(new_videos)}\n")
         print(deleted_response)
     videos = asyncio.run(GetVideosInfo(new_videos))
     for video in videos:
@@ -206,7 +206,7 @@ def Main():
             file.write(video_id + '\n')
     return ratelimit
 
-print(f"[{datetime.now().strftime('%H:%M:%S')}] Starting program...\n")
+print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Starting program...\n")
 
 
 while True:
@@ -215,10 +215,10 @@ while True:
     nextCycle = datetime.combine(datetime.now().date(), GetNextCycle(now.hour, now.minute))    
     if status:
         nextCycle += timedelta(minutes=60)
-        print(f"[{datetime.now().strftime('%H:%M:%S')}] Ratelimit likely. Sleeping until {nextCycle.strftime('%H:%M')}...")
+        print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Ratelimit likely. Sleeping until {nextCycle.strftime('%H:%M')}...")
     else:
         nextCycle += timedelta(minutes=15)
-        print(f"[{datetime.now().strftime('%H:%M:%S')}] Sleeping until {nextCycle.strftime('%H:%M')}...")
+        print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Sleeping until {nextCycle.strftime('%H:%M')}...")
     print('[END]')
     if nextCycle < now:
         nextCycle += timedelta(days=1)
