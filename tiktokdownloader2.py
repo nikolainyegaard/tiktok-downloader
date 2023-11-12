@@ -2,6 +2,7 @@ from TikTokApi import TikTokApi
 import asyncio
 import os
 import time
+import json
 from requests.exceptions import RequestException
 from tiktok_downloader import snaptik, mdown, tikdown
 from datetime import datetime, timedelta
@@ -11,6 +12,14 @@ ms_token = os.environ.get("ms_token", None)
 with open('sound_id.txt', 'r') as file:
     sound_id = file.read().strip()
 
+def LogVideoToJSON(video_array):
+    for video in video_array:
+        with open ("downloaded_videos.json", "r") as file:
+            data = json.load(file)
+        new_video = {"id":video["id"],"authorId":video["authorId"],"author":video["author"],"uploadDate":video["createTime"],"music":{"id":video["music"]["id"],"title":video["music"]["title"]},"deleted":False,"deletedDate":""}
+        data["videos"].append(new_video)
+        with open ("downloaded_videos.json", "w") as file:
+            json.dump(data, file, indent=4)
 
 async def GetVideosFromSound():
     with open('current_videos.txt', 'w') as file:
@@ -19,13 +28,13 @@ async def GetVideosFromSound():
         print('[START]')
         print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Creating API session. Please wait...")
         await api.create_sessions(ms_tokens=[ms_token], num_sessions=1, sleep_after=3)
-        video_array = []
+        video_id_array = []
         print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Fetching videos from sound {sound_id}...")
         async for video in api.sound(id=sound_id).videos(count=3000):
-            video_array.append(video.id)
+            video_id_array.append(video.id)
             with open('current_videos.txt', 'a') as file:
                 file.write(video.id + '\n')
-    return video_array
+    return video_id_array
 
 
 async def GetVideosInfo(new_videos):
@@ -45,7 +54,36 @@ async def GetVideosInfo(new_videos):
             except:
                 print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Error with video {video_url}")
     print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Successfully fetched {len(video_array)} out of {len(new_videos)} videos.")
+    LogVideoToJSON(video_array)
     return video_array
+
+
+def GetListOfUndownloadedVideoIds():
+    undownloaded_video_ids = []
+    old_video_ids = []
+    with open ("downloaded_automatically.txt", "r") as file:
+        old_video_ids += file.read().splitlines()
+    with open ("downloaded_manually.txt", "r") as file:
+        old_video_ids += file.read().splitlines()
+    with open('deleted_videos.txt', 'r') as file:
+        deleted_videos = file.read().splitlines()
+    with open ("downloaded_videos.json", "r") as file:
+        json_logged_videos = json.load(file)
+    json_video_ids = []
+    for video_info in json_logged_videos["videos"]:
+        json_video_ids.append(video_info["id"])
+    for old_id in old_video_ids:
+        if old_id not in json_video_ids and old_id not in deleted_videos:
+            undownloaded_video_ids.append(old_id)
+    print(f"Undownloaded video array length: {len(undownloaded_video_ids)}")
+    return undownloaded_video_ids
+            
+
+def MigrationToJSON():
+    undownloaded_video_ids = GetListOfUndownloadedVideoIds()
+    print("Running GetVideosInfo() on undownloaded videos...")
+    asyncio.run(GetVideosInfo(undownloaded_video_ids))
+    print("GetVideosInfo() completed.")
 
 
 def CheckDeletedVideos(video_count):
@@ -219,6 +257,8 @@ while True:
     else:
         nextCycle += timedelta(minutes=15)
         print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Sleeping until {nextCycle.strftime('%H:%M')}...")
+    print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Running JSON migration...")
+    MigrationToJSON()
     print('[END]')
     if nextCycle < now:
         nextCycle += timedelta(days=1)
