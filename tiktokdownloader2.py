@@ -305,13 +305,13 @@ def Main():
             file.write(video_id + '\n')
         successfully_downloaded.append(video)
     LogVideoToJSON(successfully_downloaded)
-    MigrationToJSON()
     return ratelimit
 
 print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Starting program...\n")
 
 while True:
     status = Main()
+    MigrationToJSON()
     now = datetime.now()
     nextCycle = datetime.combine(datetime.now().date(), GetNextCycle(now.hour, now.minute))    
     if status:
