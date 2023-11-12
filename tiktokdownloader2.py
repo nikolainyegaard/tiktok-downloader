@@ -12,14 +12,27 @@ ms_token = os.environ.get("ms_token", None)
 with open('sound_id.txt', 'r') as file:
     sound_id = file.read().strip()
 
+
 def LogVideoToJSON(video_array):
+    with open ("downloaded_videos.json", "r") as file:
+        data = json.load(file)
     for video in video_array:
-        with open ("downloaded_videos.json", "r") as file:
-            data = json.load(file)
-        new_video = {"id":video["id"],"authorId":video["authorId"],"author":video["author"],"uploadDate":video["createTime"],"music":{"id":video["music"]["id"],"title":video["music"]["title"]},"deleted":False,"deletedDate":""}
-        data["videos"].append(new_video)
-        with open ("downloaded_videos.json", "w") as file:
-            json.dump(data, file, indent=4)
+        if isinstance(video, dict):
+            old_usernames = []
+            authorId = video["authorId"]
+            try:
+                if data[authorId]["author"] != video["author"]:
+                    old_usernames.append(data[authorId]["author"])
+                    data[authorId]["author"] = video["author"]
+                else:
+                    old_usernames = data[authorId]["oldUsernames"]
+            except:
+                pass
+            new_video = {authorId:{"author":video["author"],"oldUsernames":old_usernames,"videos":[{"id":video["id"], "uploadDate":video["createTime"], "musicId":video["music"]["id"],"deleted":False,"deletedDate":""}]}}
+            data["authors"].append(new_video)
+    with open ("downloaded_videos.json", "w") as file:
+        json.dump(data, file, indent=4)
+
 
 async def GetVideosFromSound():
     with open('current_videos.txt', 'w') as file:
@@ -52,6 +65,7 @@ async def GetVideosInfo(new_videos):
                 video_array.append(video_info)
                 print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Processed {counter} of {total_videos}")
             except:
+                video_array.append(video_id)
                 print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Error with video {video_url}")
     print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Successfully fetched {len(video_array)} out of {len(new_videos)} videos.")
     LogVideoToJSON(video_array)
@@ -70,8 +84,9 @@ def GetListOfUndownloadedVideoIds():
     with open ("downloaded_videos.json", "r") as file:
         json_logged_videos = json.load(file)
     json_video_ids = []
-    for video_info in json_logged_videos["videos"]:
-        json_video_ids.append(video_info["id"])
+    for author in json_logged_videos["authors"]:
+        for video_info in author["videos"]:
+            json_video_ids.append(video_info["id"])
     for old_id in old_video_ids:
         if old_id not in json_video_ids and old_id not in deleted_videos:
             undownloaded_video_ids.append(old_id)
@@ -82,20 +97,20 @@ def GetListOfUndownloadedVideoIds():
 def MigrationToJSON():
     undownloaded_video_ids = GetListOfUndownloadedVideoIds()
     print("Running GetVideosInfo() on undownloaded videos...")
-    asyncio.run(GetVideosInfo(undownloaded_video_ids))
+    if len(undownloaded_video_ids) != 0:
+        asyncio.run(GetVideosInfo(undownloaded_video_ids))
     print("GetVideosInfo() completed.")
 
 
-def CheckDeletedVideos(video_count):
+def CheckDeletedVideos(video_count, ratelimit):
     timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+
+    if ratelimit:
+        return f"\n[{timestamp}] No new deleted videos found."
+    
     counter = 0
     append_videos = []
 
-    with open('last.txt', 'r') as file:    
-        video_count_old = int(file.read().splitlines()[-1])
-    if video_count < (video_count_old * 0.95):
-        return f"\n[{timestamp}] No new deleted videos found."
-    
     with open('downloaded_automatically.txt', 'r') as file:
         downloaded_videos_auto = file.read().splitlines()
     with open('downloaded_manually.txt', 'r') as file:
@@ -111,11 +126,19 @@ def CheckDeletedVideos(video_count):
                 append_videos.append(video_id)
 
     if counter > 0:
+        with open ("downloaded_videos.json","w") as file:
+            data = json.load(file)
         with open('deleted_videos.txt', 'a') as file:
             file.write('\n' + f'[{timestamp}]' + '\n')
         for video_id in append_videos:
                 with open('deleted_videos.txt', 'a') as file:
                     file.write(video_id + '\n')
+        
+        for author in data["authors"]:
+            for video in author["videos"]:
+                if video["id"] == video_id:
+                    video["deleted"] = True
+                    video["deletedDate"] = int(time.time())
         if counter == 1:
                 video_plural = "video"
         else:
@@ -204,8 +227,25 @@ def GetNextCycle(hours, minutes):
 
 def EvaluateRatelimit(video_count):
     with open('last.txt', 'r') as file:    
-        video_count_old = int(file.read().splitlines()[-1])
-    if video_count < (video_count_old * 0.95):
+        last_txt = file.read().splitlines()
+
+    numberToAverage = 10
+    try:
+        average = 0
+        for value in last_txt[-numberToAverage:]:
+            average += int(value)
+        average = average/numberToAverage
+        last_txt_average = average
+        try:
+            last_txt_average = int(last_txt[-1])
+        except:
+            print("Error: last.txt is empty")
+            return False
+    except:
+        print("Error: last.txt is empty")
+        return False
+
+    if video_count < (last_txt_average * 0.95):
         return True
     else:
         return False
@@ -214,10 +254,11 @@ def EvaluateRatelimit(video_count):
 def Main():
     video_ids = asyncio.run(GetVideosFromSound())
     ratelimit = EvaluateRatelimit(len(video_ids))
-    deleted_response = CheckDeletedVideos(len(video_ids))
     print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Total videos fetched: {len(video_ids)}")
-    with open('last.txt', 'a') as file:
-        file.write('\n' + str(len(video_ids)))
+    if not ratelimit:
+        with open('last.txt', 'a') as file:
+            file.write('\n' + str(len(video_ids)))
+    deleted_response = CheckDeletedVideos(video_count=len(video_ids), ratelimit=ratelimit)
     with open('downloaded_automatically.txt', 'r') as file:
         downloaded_automatically = file.read().splitlines()
     with open('downloaded_manually.txt', 'r') as file:
@@ -245,7 +286,6 @@ def Main():
     return ratelimit
 
 print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Starting program...\n")
-
 
 while True:
     status = Main()
