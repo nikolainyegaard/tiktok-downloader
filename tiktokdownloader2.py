@@ -14,24 +14,41 @@ with open('sound_id.txt', 'r') as file:
 
 
 def LogVideoToJSON(video_array):
-    with open ("downloaded_videos.json", "r") as file:
+    with open("downloaded_videos.json", "r") as file:
         data = json.load(file)
+
+    if "authors" not in data:
+        data["authors"] = {}
+
     for video in video_array:
         if isinstance(video, dict):
-            old_usernames = []
             authorId = video["authorId"]
-            try:
-                if data[authorId]["author"] != video["author"]:
-                    old_usernames.append(data[authorId]["author"])
-                    data[authorId]["author"] = video["author"]
-                else:
-                    old_usernames = data[authorId]["oldUsernames"]
-            except:
-                pass
-            new_video = {authorId:{"author":video["author"],"oldUsernames":old_usernames,"videos":[{"id":video["id"], "uploadDate":video["createTime"], "musicId":video["music"]["id"],"deleted":False,"deletedDate":""}]}}
-            data["authors"].append(new_video)
-    with open ("downloaded_videos.json", "w") as file:
+
+            if authorId not in data["authors"]:
+                data["authors"][authorId] = {
+                    "author": video["author"],
+                    "oldUsernames": [],
+                    "videos": []
+                }
+
+            elif data["authors"][authorId]["author"] != video["author"]:
+                if video["author"] not in data["authors"][authorId]["oldUsernames"]:
+                    data["authors"][authorId]["oldUsernames"].append(data["authors"][authorId]["author"])
+
+                data["authors"][authorId]["author"] = video["author"]
+
+            new_video = {
+                "id": video["id"],
+                "uploadDate": video["createTime"],
+                "musicId": video["music"]["id"],
+                "deleted": False,
+                "deletedDate": ""
+            }
+            data["authors"][authorId]["videos"].append(new_video)
+
+    with open("downloaded_videos.json", "w") as file:
         json.dump(data, file, indent=4)
+
 
 
 async def GetVideosFromSound():
@@ -39,10 +56,10 @@ async def GetVideosFromSound():
         pass
     async with TikTokApi() as api:
         print('[START]')
-        print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Creating API session. Please wait...")
+        print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Creating API session. Please wait...\n")
         await api.create_sessions(ms_tokens=[ms_token], num_sessions=1, sleep_after=3)
         video_id_array = []
-        print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Fetching videos from sound {sound_id}...")
+        print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Fetching videos from sound {sound_id}...\n")
         async for video in api.sound(id=sound_id).videos(count=3000):
             video_id_array.append(video.id)
             with open('current_videos.txt', 'a') as file:
@@ -67,9 +84,18 @@ async def GetVideosInfo(new_videos):
             except:
                 video_array.append(video_id)
                 print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Error with video {video_url}")
-    print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Successfully fetched {len(video_array)} out of {len(new_videos)} videos.")
-    LogVideoToJSON(video_array)
+    print(f"\n[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Successfully fetched {len(video_array)} out of {len(new_videos)} videos.\n")
     return video_array
+
+
+def GetDownloadedVideos():
+    with open ("downloaded_videos.json", "r") as file:
+        json_logged_videos = json.load(file)
+    ids = []
+    for _, author_info in json_logged_videos["authors"].items():
+        for video in author_info["videos"]:
+            ids.append(video["id"])
+    return ids
 
 
 def GetListOfUndownloadedVideoIds():
@@ -81,32 +107,24 @@ def GetListOfUndownloadedVideoIds():
         old_video_ids += file.read().splitlines()
     with open('deleted_videos.txt', 'r') as file:
         deleted_videos = file.read().splitlines()
-    with open ("downloaded_videos.json", "r") as file:
-        json_logged_videos = json.load(file)
-    json_video_ids = []
-    for author in json_logged_videos["authors"]:
-        for video_info in author["videos"]:
-            json_video_ids.append(video_info["id"])
+    json_video_ids = GetDownloadedVideos()
     for old_id in old_video_ids:
         if old_id not in json_video_ids and old_id not in deleted_videos:
             undownloaded_video_ids.append(old_id)
-    print(f"Undownloaded video array length: {len(undownloaded_video_ids)}")
     return undownloaded_video_ids
             
 
 def MigrationToJSON():
     undownloaded_video_ids = GetListOfUndownloadedVideoIds()
-    print("Running GetVideosInfo() on undownloaded videos...")
     if len(undownloaded_video_ids) != 0:
         asyncio.run(GetVideosInfo(undownloaded_video_ids))
-    print("GetVideosInfo() completed.")
 
 
 def CheckDeletedVideos(video_count, ratelimit):
     timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
 
     if ratelimit:
-        return f"\n[{timestamp}] No new deleted videos found."
+        return f"[{timestamp}] No deleted videos found.\n"
     
     counter = 0
     append_videos = []
@@ -145,7 +163,7 @@ def CheckDeletedVideos(video_count, ratelimit):
                 video_plural = "videos"
         return f"\n[{timestamp}] Added {counter} {video_plural} to deleted_videos.txt."
     else:
-        return f"\n[{timestamp}] No new deleted videos found."        
+        return f"\n[{timestamp}] No new deleted videos found.\n"        
 
 
 def DownloadVideo(author_folder, video_id, authorName):
@@ -230,6 +248,7 @@ def EvaluateRatelimit(video_count):
         last_txt = file.read().splitlines()
 
     numberToAverage = 10
+
     try:
         average = 0
         for value in last_txt[-numberToAverage:]:
@@ -272,8 +291,9 @@ def Main():
         print(deleted_response)
         return ratelimit
     else:
-        print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] New videos found: {len(new_videos)}\n")
+        print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] New videos found: {len(new_videos)}")
         print(deleted_response)
+    successfully_downloaded = []
     videos = asyncio.run(GetVideosInfo(new_videos))
     for video in videos:
         authorName = video['author']
@@ -283,6 +303,9 @@ def Main():
         DownloadVideo(author_folder, video_id, authorName)
         with open('downloaded_automatically.txt', 'a') as file:
             file.write(video_id + '\n')
+        successfully_downloaded.append(video)
+    LogVideoToJSON(successfully_downloaded)
+    MigrationToJSON()
     return ratelimit
 
 print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Starting program...\n")
@@ -297,8 +320,6 @@ while True:
     else:
         nextCycle += timedelta(minutes=15)
         print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Sleeping until {nextCycle.strftime('%H:%M')}...")
-    print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Running JSON migration...")
-    MigrationToJSON()
     print('[END]')
     if nextCycle < now:
         nextCycle += timedelta(days=1)
