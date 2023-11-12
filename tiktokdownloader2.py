@@ -45,6 +45,25 @@ def LogVideoToJSON(video_array):
                 "deletedDate": ""
             }
             data["authors"][authorId]["videos"].append(new_video)
+        elif isinstance(video, str):
+            authorId = "0000000000000000000"
+
+            if authorId not in data["authors"]:
+                data["authors"][authorId] = {
+                    "author": video["author"],
+                    "oldUsernames": [],
+                    "videos": []
+                }
+            
+            new_video = {
+                "id": video["id"],
+                "uploadDate": "unknown",
+                "musicId": "unknown",
+                "deleted": True,
+                "deletedDate": int(time.time())
+            }
+            data["authors"][authorId]["videos"].append(new_video)
+
 
     with open("downloaded_videos.json", "w") as file:
         json.dump(data, file, indent=4)
@@ -105,11 +124,9 @@ def GetListOfUndownloadedVideoIds():
         old_video_ids += file.read().splitlines()
     with open ("downloaded_manually.txt", "r") as file:
         old_video_ids += file.read().splitlines()
-    with open('deleted_videos.txt', 'r') as file:
-        deleted_videos = file.read().splitlines()
     json_video_ids = GetDownloadedVideos()
     for old_id in old_video_ids:
-        if old_id not in json_video_ids and old_id not in deleted_videos:
+        if old_id not in json_video_ids:
             undownloaded_video_ids.append(old_id)
     return undownloaded_video_ids
             
@@ -117,7 +134,8 @@ def GetListOfUndownloadedVideoIds():
 def MigrationToJSON():
     undownloaded_video_ids = GetListOfUndownloadedVideoIds()
     if len(undownloaded_video_ids) != 0:
-        asyncio.run(GetVideosInfo(undownloaded_video_ids))
+        videos = asyncio.run(GetVideosInfo(undownloaded_video_ids))
+        LogVideoToJSON(videos)
 
 
 def CheckDeletedVideos(video_count, ratelimit):
