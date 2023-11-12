@@ -3,6 +3,7 @@ Testing/
 Dockerfile
 downloaded_automatically.txt
 downloaded_manually.txt
+downloaded_videos.json
 sound_id.txt
 current_videos.txt
 last.txt
