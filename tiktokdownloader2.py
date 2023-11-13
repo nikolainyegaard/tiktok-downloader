@@ -28,6 +28,7 @@ def LogVideoToJSON(video_array):
                 data["authors"][authorId] = {
                     "author": video["author"],
                     "oldUsernames": [],
+                    "videoCount":0,
                     "videos": []
                 }
 
@@ -39,31 +40,33 @@ def LogVideoToJSON(video_array):
 
             new_video = {
                 "id": video["id"],
-                "uploadDate": video["createTime"],
+                "uploadDate": int(video["createTime"]),
                 "musicId": video["music"]["id"],
                 "deleted": False,
                 "deletedDate": ""
             }
             data["authors"][authorId]["videos"].append(new_video)
+            data["authors"][authorId]["videoCount"] = len(data["authors"][authorId]["videos"])
         elif isinstance(video, str):
             authorId = "0000000000000000000"
 
             if authorId not in data["authors"]:
                 data["authors"][authorId] = {
-                    "author": video["author"],
-                    "oldUsernames": [],
+                    "author": "unknown",
+                    "oldUsernames": "unknown",
+                    "videoCount":0,
                     "videos": []
                 }
             
             new_video = {
-                "id": video["id"],
+                "id": video,
                 "uploadDate": "unknown",
                 "musicId": "unknown",
                 "deleted": True,
                 "deletedDate": int(time.time())
             }
             data["authors"][authorId]["videos"].append(new_video)
-
+            data["authors"][authorId]["videoCount"] = len(data["authors"][authorId]["videos"])
 
     with open("downloaded_videos.json", "w") as file:
         json.dump(data, file, indent=4)
@@ -87,12 +90,20 @@ async def GetVideosFromSound():
 
 
 async def GetVideosInfo(new_videos):
-    total_videos = len(new_videos)
-    counter = 0
+    with open("deleted_videos.txt", "r") as file:
+        deleted = file.read().splitlines()
     video_array = []
+    new_videos_clean = []
+    counter = 0
+    for video_id in new_videos:
+        if video_id not in deleted:
+            new_videos_clean.append(video_id)
+        else:
+            video_array.append(video_id)
+    total_videos = len(new_videos_clean)
     async with TikTokApi() as api:
         await api.create_sessions(ms_tokens=[ms_token], num_sessions=1, sleep_after=3)
-        for video_id in new_videos:
+        for video_id in new_videos_clean:
             counter += 1
             video_url = f"https://www.tiktok.com/@user/video/{video_id}"
             video = api.video(url=video_url)
