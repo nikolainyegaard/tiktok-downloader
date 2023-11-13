@@ -117,15 +117,49 @@ async def GetVideosInfo(new_videos):
     print(f"\n[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Successfully fetched {len(video_array)} out of {len(new_videos)} videos.\n")
     return video_array
 
+def GetVideoIDs(videos):
+    ids = []
+    for video in videos:
+        ids.append(video["id"])
+    return ids
 
 def GetDownloadedVideos():
     with open ("downloaded_videos.json", "r") as file:
-        json_logged_videos = json.load(file)
-    ids = []
-    for _, author_info in json_logged_videos["authors"].items():
+        data = json.load(file)
+    videos = []
+    for _, author_info in data["authors"].items():
         for video in author_info["videos"]:
-            ids.append(video["id"])
-    return ids
+            videos.append(video)
+    return videos
+
+def GetAuthorFromVideoID(video_id):
+    with open ("downloaded_videos.json", "r") as file:
+        data= json.load(file)
+    for authorId, author_info in data["authors"].items():
+        for video in author_info["videos"]:
+            if video_id == video["id"]:
+                return authorId
+    return False
+
+def GetDeletedVideos():
+    with open ("downloaded_videos.json", "r") as file:
+        data = json.load(file)
+    videos = []
+    for _, author_info in data["authors"].items():
+        for video in author_info["videos"]:
+            if video["deleted"] == True:
+                videos.append(video)
+    return videos
+
+def GetActiveVideos():
+    with open ("downloaded_videos.json", "r") as file:
+        data = json.load(file)
+    videos = []
+    for _, author_info in data["authors"].items():
+        for video in author_info["videos"]:
+            if video["deleted"] == False:
+                videos.append(video)
+    return videos
 
 
 def GetListOfUndownloadedVideoIds():
@@ -135,7 +169,7 @@ def GetListOfUndownloadedVideoIds():
         old_video_ids += file.read().splitlines()
     with open ("downloaded_manually.txt", "r") as file:
         old_video_ids += file.read().splitlines()
-    json_video_ids = GetDownloadedVideos()
+    json_video_ids = GetVideoIDs(GetDownloadedVideos())
     for old_id in old_video_ids:
         if old_id not in json_video_ids:
             undownloaded_video_ids.append(old_id)
@@ -149,48 +183,43 @@ def MigrationToJSON():
         LogVideoToJSON(videos)
 
 
-def CheckDeletedVideos(video_count, ratelimit):
+def CheckDeletedVideos(ratelimit):
     timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
 
     if ratelimit:
         return f"[{timestamp}] No deleted videos found.\n"
     
     counter = 0
-    append_videos = []
+    deleted_video_ids = []
 
-    with open('downloaded_automatically.txt', 'r') as file:
-        downloaded_videos_auto = file.read().splitlines()
-    with open('downloaded_manually.txt', 'r') as file:
-        downloaded_videos_manual = file.read().splitlines()
     with open('current_videos.txt', 'r') as file:
-        current_videos = file.read().splitlines()
-    with open('deleted_videos.txt', 'r') as file:
-        deleted_videos = file.read().splitlines()
+        last_pull = file.read().splitlines()
 
-    for video_id in downloaded_videos_auto:
-        if video_id not in current_videos and video_id not in deleted_videos and not video_id in downloaded_videos_manual:
-                counter += 1
-                append_videos.append(video_id)
+    with open ("downloaded_videos.json", "r") as file:
+        data = json.load(file)
+    
+    active_video_ids = GetVideoIDs(GetActiveVideos())
 
-    if counter > 0:
-        with open ("downloaded_videos.json","r") as file:
-            data = json.load(file)
-        with open('deleted_videos.txt', 'a') as file:
-            file.write('\n' + f'[{timestamp}]' + '\n')
-        for video_id in append_videos:
-                with open('deleted_videos.txt', 'a') as file:
-                    file.write(video_id + '\n')
-        
-        for author in data["authors"]:
-            for video in author["videos"]:
-                if video["id"] == video_id:
-                    video["deleted"] = True
-                    video["deletedDate"] = int(time.time())
+    for video_id in active_video_ids:
+        if video_id not in last_pull:
+            deleted_video_ids.append(video_id)
+            counter += 1
+    
+    for video_id in deleted_video_ids:
+        authorId = GetAuthorFromVideoID(video_id)
+        for video in data["authors"][authorId]["videos"]:
+            if video["id"] == video_id:
+                video["deleted"] = True
+                video["deletedDate"] = int(time.time())
+                with open ("downloaded_videos.json", "w") as file:
+                    json.dump(data, file, indent=4)
+                print(f"\n[{timestamp}] Video {video['id']} by @{data['authors'][authorId]['author']} has been deleted.")
+    if counter != 0:
         if counter == 1:
-                video_plural = "video"
+            video_plural = "video"
         else:
-                video_plural = "videos"
-        return f"\n[{timestamp}] Added {counter} {video_plural} to deleted_videos.txt."
+            video_plural = "videos"
+        return f"\n[{timestamp}] Marked {counter} {video_plural} as deleted."
     else:
         return f"\n[{timestamp}] No new deleted videos found.\n"        
 
@@ -306,14 +335,10 @@ def Main():
     if not ratelimit:
         with open('last.txt', 'a') as file:
             file.write('\n' + str(len(video_ids)))
-    deleted_response = CheckDeletedVideos(video_count=len(video_ids), ratelimit=ratelimit)
-    with open('downloaded_automatically.txt', 'r') as file:
-        downloaded_automatically = file.read().splitlines()
-    with open('downloaded_manually.txt', 'r') as file:
-        downloaded_manually = file.read().splitlines()
+    deleted_response = CheckDeletedVideos(ratelimit)
     new_videos = []
     for video_id in video_ids:
-        if video_id not in downloaded_automatically and video_id not in downloaded_manually:
+        if video_id not in GetVideoIDs(GetDownloadedVideos()):
             new_videos.append(video_id)
     if len(new_videos) == 0:
         print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] No new videos found.")
