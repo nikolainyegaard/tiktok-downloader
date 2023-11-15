@@ -162,27 +162,6 @@ def GetActiveVideos():
     return videos
 
 
-def GetListOfUndownloadedVideoIds():
-    undownloaded_video_ids = []
-    old_video_ids = []
-    with open ("downloaded_automatically.txt", "r") as file:
-        old_video_ids += file.read().splitlines()
-    with open ("downloaded_manually.txt", "r") as file:
-        old_video_ids += file.read().splitlines()
-    json_video_ids = GetVideoIDs(GetDownloadedVideos())
-    for old_id in old_video_ids:
-        if old_id not in json_video_ids:
-            undownloaded_video_ids.append(old_id)
-    return undownloaded_video_ids
-            
-
-def MigrationToJSON():
-    undownloaded_video_ids = GetListOfUndownloadedVideoIds()
-    if len(undownloaded_video_ids) != 0:
-        videos = asyncio.run(GetVideosInfo(undownloaded_video_ids))
-        LogVideoToJSON(videos)
-
-
 def CheckDeletedVideos(ratelimit):
     timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
 
@@ -355,8 +334,6 @@ def Main():
         author_folder = os.path.join('../../Videos/TikTok', f"@{authorName}")
         os.makedirs(author_folder, exist_ok=True)
         DownloadVideo(author_folder, video_id, authorName)
-        with open('downloaded_automatically.txt', 'a') as file:
-            file.write(video_id + '\n')
         successfully_downloaded.append(video)
     LogVideoToJSON(successfully_downloaded)
     return ratelimit
@@ -365,7 +342,6 @@ print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Starting program...\n")
 
 while True:
     status = Main()
-    MigrationToJSON()
     now = datetime.now()
     nextCycle = datetime.combine(datetime.now().date(), GetNextCycle(now.hour, now.minute))    
     if status:
