@@ -7,6 +7,9 @@ from requests.exceptions import RequestException
 from tiktok_downloader import snaptik, mdown, tikdown
 from datetime import datetime, timedelta
 
+with open("./last.txt", "a") as file:
+    pass
+
 ms_token = os.environ.get("ms_token", None)
 
 with open('sound_id.txt', 'r') as file:
@@ -45,29 +48,12 @@ def LogVideoToJSON(video_array):
                 "deleted": False,
                 "deletedDate": ""
             }
+
             data["authors"][authorId]["videos"].append(new_video)
             data["authors"][authorId]["videoCount"] = len(data["authors"][authorId]["videos"])
-        elif isinstance(video, str):
-            authorId = "0000000000000000000"
-
-            if authorId not in data["authors"]:
-                data["authors"][authorId] = {
-                    "author": "unknown",
-                    "oldUsernames": "unknown",
-                    "videoCount":0,
-                    "videos": []
-                }
-            
-            new_video = {
-                "id": video,
-                "uploadDate": "unknown",
-                "musicId": "unknown",
-                "deleted": True,
-                "deletedDate": int(time.time())
-            }
-            data["authors"][authorId]["videos"].append(new_video)
-            data["authors"][authorId]["videoCount"] = len(data["authors"][authorId]["videos"])
-
+        else:
+            pass
+        
     with open("downloaded_videos.json", "w") as file:
         json.dump(data, file, indent=4)
 
@@ -90,19 +76,12 @@ async def GetVideosFromSound():
 
 
 async def GetVideosInfo(new_videos):
-    deleted = GetVideoIDs(GetDeletedVideos())
     video_array = []
-    new_videos_clean = []
     counter = 0
-    for video_id in new_videos:
-        if video_id not in deleted:
-            new_videos_clean.append(video_id)
-        else:
-            video_array.append(video_id)
-    total_videos = len(new_videos_clean)
+    total_videos = len(new_videos)
     async with TikTokApi() as api:
         await api.create_sessions(ms_tokens=[ms_token], num_sessions=1, sleep_after=3)
-        for video_id in new_videos_clean:
+        for video_id in new_videos:
             counter += 1
             video_url = f"https://www.tiktok.com/@user/video/{video_id}"
             video = api.video(url=video_url)
@@ -111,16 +90,17 @@ async def GetVideosInfo(new_videos):
                 video_array.append(video_info)
                 print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Processed {counter} of {total_videos}")
             except:
-                video_array.append(video_id)
                 print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Error with video {video_url}")
     print(f"\n[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Successfully fetched {len(video_array)} out of {len(new_videos)} videos.\n")
     return video_array
+
 
 def GetVideoIDs(videos):
     ids = []
     for video in videos:
         ids.append(video["id"])
     return ids
+
 
 def GetDownloadedVideos():
     with open ("downloaded_videos.json", "r") as file:
@@ -131,6 +111,7 @@ def GetDownloadedVideos():
             videos.append(video)
     return videos
 
+
 def GetAuthorFromVideoID(video_id):
     with open ("downloaded_videos.json", "r") as file:
         data= json.load(file)
@@ -139,6 +120,7 @@ def GetAuthorFromVideoID(video_id):
             if video_id == video["id"]:
                 return authorId
     return False
+
 
 def GetDeletedVideos():
     with open ("downloaded_videos.json", "r") as file:
@@ -150,15 +132,50 @@ def GetDeletedVideos():
                 videos.append(video)
     return videos
 
+
 def GetActiveVideos():
     with open ("downloaded_videos.json", "r") as file:
         data = json.load(file)
     videos = []
     for _, author_info in data["authors"].items():
         for video in author_info["videos"]:
-            if video["deleted"] == False:
+            if video["deleted"] == False and video["musicId"] == sound_id:
                 videos.append(video)
     return videos
+
+
+def CheckUndeletedVideos():
+    timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    undeleted_videos = []
+    with open('current_videos.txt', 'r') as file:
+        last_pull = file.read().splitlines()
+    with open ("downloaded_videos.json", "r") as file:
+        data = json.load(file)
+
+    for video_id in last_pull:
+        if video_id in GetVideoIDs(GetDeletedVideos()):
+            undeleted_videos.append(video_id)
+
+    videos = asyncio.run(GetVideosInfo(undeleted_videos))
+
+    num_videos = len(undeleted_videos)
+    if num_videos != 0:
+        if num_videos == 1:
+            video_plural = "video"
+        else:
+            video_plural = "videos"
+        for video_id in undeleted_videos:
+            for authorId, author_info in data["authors"].items():
+                for video in author_info["videos"]:
+                    if video["id"] == video_id:
+                        data["authors"][authorId]["videos"].remove(video)
+                        with open ("downloaded_videos.json", "w") as file:
+                            json.dump(data, file, indent=4)
+                        print(f"\n[{timestamp}] Video {video['id']} by @{data['authors'][authorId]['author']} has been marked as undeleted.")
+        LogVideoToJSON(videos)
+        return f"\n[{timestamp}] Marked {num_videos} {video_plural} as undeleted."
+    else:
+        return f"\n[{timestamp}] No new undeleted videos found.\n"
 
 
 def CheckDeletedVideos(ratelimit):
@@ -199,7 +216,7 @@ def CheckDeletedVideos(ratelimit):
             video_plural = "videos"
         return f"\n[{timestamp}] Marked {counter} {video_plural} as deleted."
     else:
-        return f"\n[{timestamp}] No new deleted videos found.\n"        
+        return f"\n[{timestamp}] No new deleted videos found.\n"
 
 
 def DownloadVideo(author_folder, video_id, authorName):
@@ -305,6 +322,14 @@ def EvaluateRatelimit(video_count):
     else:
         return False
 
+def ExecuteDeleteCheck(ratelimit):
+    print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Processing deleted videos...\n")
+    deleted_status = CheckDeletedVideos(ratelimit)
+    print(deleted_status)
+    print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Processing undeleted videos...\n")
+    undeleted_status = CheckUndeletedVideos()
+    print(undeleted_status)
+
 
 def Main():
     video_ids = asyncio.run(GetVideosFromSound())
@@ -313,18 +338,16 @@ def Main():
     if not ratelimit:
         with open('last.txt', 'a') as file:
             file.write('\n' + str(len(video_ids)))
-    deleted_response = CheckDeletedVideos(ratelimit)
     new_videos = []
     for video_id in video_ids:
         if video_id not in GetVideoIDs(GetDownloadedVideos()):
             new_videos.append(video_id)
     if len(new_videos) == 0:
         print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] No new videos found.")
-        print(deleted_response)
+        ExecuteDeleteCheck(ratelimit)
         return ratelimit
     else:
         print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] New videos found: {len(new_videos)}")
-        print(deleted_response)
     successfully_downloaded = []
     videos = asyncio.run(GetVideosInfo(new_videos))
     for video in videos:
@@ -335,6 +358,7 @@ def Main():
         DownloadVideo(author_folder, video_id, authorName)
         successfully_downloaded.append(video)
     LogVideoToJSON(successfully_downloaded)
+    ExecuteDeleteCheck(ratelimit)
     return ratelimit
 
 print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Starting program...\n")
