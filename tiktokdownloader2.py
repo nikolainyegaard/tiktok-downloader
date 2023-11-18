@@ -90,8 +90,7 @@ async def GetVideosFromSound():
 
 
 async def GetVideosInfo(new_videos):
-    with open("deleted_videos.txt", "r") as file:
-        deleted = file.read().splitlines()
+    deleted = GetVideoIDs(GetDeletedVideos())
     video_array = []
     new_videos_clean = []
     counter = 0
