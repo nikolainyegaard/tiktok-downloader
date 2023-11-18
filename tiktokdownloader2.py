@@ -89,7 +89,8 @@ async def GetVideosInfo(new_videos):
                 print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Processed {counter} of {total_videos}")
             except:
                 print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Error with video {video_url}")
-    print(f"\n[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Successfully fetched {len(video_array)} out of {len(new_videos)} videos.\n")
+    print("")
+    print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Successfully fetched {len(video_array)} out of {len(new_videos)} videos.\n")
     return video_array
 
 
@@ -167,11 +168,11 @@ def CheckUndeletedVideos():
                         data["authors"][authorId]["videos"].remove(video)
                         with open ("downloaded_videos.json", "w") as file:
                             json.dump(data, file, indent=4)
-                        print(f"\n[{timestamp}] Video {video['id']} by @{data['authors'][authorId]['author']} has been marked as undeleted.")
+                        print(f"[{timestamp}] Video {video['id']} by @{data['authors'][authorId]['author']} has been marked as undeleted.")
         LogVideoToJSON(videos)
-        return f"\n[{timestamp}] Marked {len(undeleted_videos)} {video_plural} as undeleted."
+        return f"[{timestamp}] Marked {len(undeleted_videos)} {video_plural} as undeleted.\n"
     else:
-        return f"\n[{timestamp}] No new undeleted videos found.\n"
+        return f"[{timestamp}] No new undeleted videos found.\n"
 
 
 def CheckDeletedVideos(ratelimit):
@@ -204,15 +205,15 @@ def CheckDeletedVideos(ratelimit):
                 video["deletedDate"] = int(time.time())
                 with open ("downloaded_videos.json", "w") as file:
                     json.dump(data, file, indent=4)
-                print(f"\n[{timestamp}] Video {video['id']} by @{data['authors'][authorId]['author']} has been deleted.")
+                print(f"[{timestamp}] Video {video['id']} by @{data['authors'][authorId]['author']} has been deleted.")
     if counter != 0:
         if counter == 1:
             video_plural = "video"
         else:
             video_plural = "videos"
-        return f"\n[{timestamp}] Marked {counter} {video_plural} as deleted."
+        return f"[{timestamp}] Marked {counter} {video_plural} as deleted.\n"
     else:
-        return f"\n[{timestamp}] No new deleted videos found.\n"
+        return f"[{timestamp}] No new deleted videos found.\n"
 
 
 def DownloadVideo(author_folder, video_id, authorName):
@@ -230,20 +231,20 @@ def DownloadVideo(author_folder, video_id, authorName):
                 try:
                     video_data[0].download(os.path.join(author_folder, f"{video_id}.mp4"))
                 except:
-                    print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Index error")
+                    print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Index error\n")
                     return
                 print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Download successful!\n")
                 return
             except (RequestException, TimeoutError) as e:
-                print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Failed using {download_service.__name__}: {str(e)}")
-                print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Trying next service...")
+                print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Failed using {download_service.__name__}: {str(e)}.\n")
+                print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Trying next service...\n")
         
         if attempt < max_retries - 1:
             sleep_time = 2 ** attempt
-            print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] All services failed. Retrying all services in {sleep_time} seconds...")
+            print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] All services failed. Retrying all services in {sleep_time} seconds...\n")
             time.sleep(sleep_time)
     
-    print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Failed to download after several attempts with all services.")
+    print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Failed to download after several attempts with all services.\n")
     return
 
 
@@ -269,7 +270,7 @@ def time_limited_request(video_url, download_service, timeout_seconds):
     download_thread.join(timeout=timeout_seconds)
     
     if download_thread.is_alive():
-        raise TimeoutError(f"{download_service.__name__} took too long to respond.")
+        raise TimeoutError(f"{download_service.__name__} took too long to respond.\n")
     if download_thread.error is not None:
         raise download_thread.error
     
@@ -307,10 +308,8 @@ def EvaluateRatelimit(video_count):
         try:
             last_txt_average = int(last_txt[-1])
         except:
-            print("Error: last.txt is empty")
             return False
     except:
-        print("Error: last.txt is empty")
         return False
 
     if video_count < (last_txt_average * 0.95):
@@ -319,10 +318,10 @@ def EvaluateRatelimit(video_count):
         return False
 
 def ExecuteDeleteCheck(ratelimit):
-    print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Processing deleted videos...\n")
+    print(f"\n[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Processing deleted videos...\n")
     deleted_status = CheckDeletedVideos(ratelimit)
     print(deleted_status)
-    print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Processing undeleted videos...\n")
+    print(f"\n[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Processing undeleted videos...\n")
     undeleted_status = CheckUndeletedVideos()
     print(undeleted_status)
 
@@ -339,11 +338,11 @@ def Main():
         if video_id not in GetVideoIDs(GetDownloadedVideos()):
             new_videos.append(video_id)
     if len(new_videos) == 0:
-        print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] No new videos found.")
+        print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] No new videos found.\n")
         ExecuteDeleteCheck(ratelimit)
         return ratelimit
     else:
-        print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] New videos found: {len(new_videos)}")
+        print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] New videos found: {len(new_videos)}\n")
     successfully_downloaded = []
     videos = asyncio.run(GetVideosInfo(new_videos))
     for video in videos:
@@ -365,7 +364,7 @@ while True:
     nextCycle = datetime.combine(datetime.now().date(), GetNextCycle(now.hour, now.minute))    
     if status:
         nextCycle += timedelta(minutes=60)
-        print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Ratelimit likely. Sleeping until {nextCycle.strftime('%H:%M')}...")
+        print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Ratelimit likely. Sleeping until {nextCycle.strftime('%H:%M')}...\n")
     else:
         nextCycle += timedelta(minutes=15)
         print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Sleeping until {nextCycle.strftime('%H:%M')}...")
