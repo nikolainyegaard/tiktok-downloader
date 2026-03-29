@@ -149,7 +149,7 @@ def get_video_id_sets(tiktok_id) -> tuple[set, set]:
             "SELECT video_id, status FROM videos WHERE tiktok_id = ?", (tiktok_id,)
         ).fetchall()
     known  = {r["video_id"] for r in rows}
-    active = {r["video_id"] for r in rows if r["status"] == "up"}
+    active = {r["video_id"] for r in rows if r["status"] in ("up", "undeleted")}
     return known, active
 
 
@@ -167,6 +167,14 @@ def update_video_downloaded(video_id, file_path):
             UPDATE videos SET download_date = ?, file_path = ?
             WHERE video_id = ?
         """, (int(time.time()), file_path, video_id))
+
+
+def update_video_file_path(video_id, file_path):
+    with get_db() as conn:
+        conn.execute(
+            "UPDATE videos SET file_path = ? WHERE video_id = ?",
+            (file_path, video_id),
+        )
 
 
 def mark_video_deleted(video_id):
