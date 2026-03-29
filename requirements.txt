@@ -1,5 +1,3 @@
-TikTokApi
-Asyncio
-Requests
-Datetime
-tiktok_downloader
+TikTokApi>=6.0.0
+yt-dlp
+flask
