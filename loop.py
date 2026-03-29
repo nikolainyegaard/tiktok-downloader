@@ -10,8 +10,8 @@ from collections import deque
 from datetime import datetime, timezone
 
 import database as db
-from config import get_ms_token
-from tiktok_api import get_user_info, get_user_videos
+from config import get_ms_token, get_cookies_flat, COOKIES_PATH
+from tiktok_api import get_user_info, get_user_videos, get_video_details
 from downloader import download_video, download_photos
 
 # ── Shared state ──────────────────────────────────────────────────────────────
@@ -64,11 +64,13 @@ async def _process_all_users(users: list[dict]):
     from TikTokApi import TikTokApi
 
     ms_token = get_ms_token()
+    cookies  = get_cookies_flat()
 
     async with TikTokApi() as api:
         await api.create_sessions(
-            ms_tokens=[ms_token], num_sessions=1, sleep_after=3,
-            browser="webkit",
+            ms_tokens=[ms_token] if ms_token else [],
+            num_sessions=1,
+            sleep_after=3,
         )
 
         for idx, user in enumerate(users):
@@ -103,7 +105,7 @@ async def _process_all_users(users: list[dict]):
                 display_name = user.get("display_name") or username
 
             try:
-                remote_videos = await get_user_videos(api, username)
+                remote_videos = get_user_videos(username, COOKIES_PATH)
                 _log(f"  {len(remote_videos)} videos visible on TikTok")
             except Exception as e:
                 _log(f"  Failed to fetch video list: {e}")
@@ -128,29 +130,44 @@ async def _process_all_users(users: list[dict]):
             video_map = {v["video_id"]: v for v in remote_videos}
             for vid_id in new_ids:
                 v = video_map[vid_id]
+                try:
+                    details = get_video_details(vid_id, username, cookies)
+                except Exception as e:
+                    _log(f"  Could not fetch details for {vid_id}: {e} — assuming video type")
+                    details = {
+                        "type":        "video",
+                        "description": v["description"],
+                        "upload_date": v["upload_date"],
+                        "image_urls":  [],
+                    }
                 db.add_video(
-                    vid_id, tiktok_id, v["type"],
-                    v["description"], v["upload_date"]
+                    vid_id, tiktok_id, details["type"],
+                    details["description"], details["upload_date"]
                 )
-                if v["type"] == "photo" and v.get("image_urls"):
+                if details["type"] == "photo" and details.get("image_urls"):
+                    _log(f"  Downloading photo post {vid_id} ({len(details['image_urls'])} images)...")
                     path = download_photos(
                         video_id=vid_id,
                         username=username,
-                        image_urls=v["image_urls"],
-                        upload_date=v["upload_date"],
+                        image_urls=details["image_urls"],
+                        upload_date=details["upload_date"],
                     )
                 else:
+                    _log(f"  Downloading video {vid_id}...")
                     path = download_video(
                         video_id=vid_id,
                         username=username,
                         tiktok_id=tiktok_id,
                         display_name=display_name,
-                        description=v["description"],
-                        upload_date=v["upload_date"],
+                        description=details["description"],
+                        upload_date=details["upload_date"],
                         download_date=int(time.time()),
                     )
                 if path:
+                    _log(f"  Saved {vid_id} → {path}")
                     db.update_video_downloaded(vid_id, path)
+                else:
+                    _log(f"  Failed to download {vid_id}")
 
             for vid_id in deleted_ids:
                 db.mark_video_deleted(vid_id)

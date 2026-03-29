@@ -1,6 +1,12 @@
 TikTokDownloaderVenv/
 Testing/
 Dockerfile
+docker-compose.override.yml
+.dockerignore
+data/
+videos/
+__pycache__/
+*.pyc
 downloaded_automatically.txt
 downloaded_manually.txt
 downloaded_videos.json

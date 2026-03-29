@@ -29,8 +29,9 @@ def _process_add(username: str) -> None:
         from TikTokApi import TikTokApi
         async with TikTokApi() as api:
             await api.create_sessions(
-                ms_tokens=[ms_token], num_sessions=1, sleep_after=3,
-                browser="webkit",
+                ms_tokens=[ms_token] if ms_token else [],
+                num_sessions=1,
+                sleep_after=3,
             )
             return await get_user_info(api, username)
 

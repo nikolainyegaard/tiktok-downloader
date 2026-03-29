@@ -11,10 +11,9 @@ Managed through a small web UI. All state (users, cookies, download history) liv
 A background loop runs on a fixed interval (default: 30 minutes, recommended: 3 hours for large libraries). Each iteration:
 
 1. Loads all tracked users from the database
-2. Creates one authenticated TikTok session (shared across all users in that run)
-3. For each user:
-   - Refreshes their profile info and detects username changes
-   - Fetches their full public video list from TikTok
+2. For each user:
+   - Fetches their profile info via TikTokApi (Playwright/Chromium) and detects username changes
+   - Fetches their full public video list via yt-dlp — no browser session needed
    - Compares it against the database
    - Downloads any new videos via yt-dlp, embedding metadata into the file; photo posts are downloaded as individual `.jpg` images
    - Marks any previously-seen videos that have disappeared as deleted
@@ -57,7 +56,7 @@ Create a folder on your server and drop in a `docker-compose.yml`:
 ```yaml
 services:
   tiktok-downloader:
-    image: ghcr.io/OWNER/tiktok-downloader:latest
+    image: ghcr.io/nikolainyegaard/tiktok-downloader:latest
     container_name: tiktok-downloader
     restart: unless-stopped
     volumes:
@@ -69,7 +68,7 @@ services:
       - "127.0.0.1:5000:5000"
 ```
 
-Replace `ghcr.io/OWNER/tiktok-downloader:latest` with the actual published image name.
+Replace `ghcr.io/nikolainyegaard/tiktok-downloader:latest` with the actual published image name.
 
 ### 2. Start the container
 
@@ -127,10 +126,10 @@ tiktok.yourdomain.com {
 
 ```bash
 # Build
-docker build -t ghcr.io/OWNER/tiktok-downloader:latest .
+docker build -t ghcr.io/nikolainyegaard/tiktok-downloader:latest .
 
 # Push to GitHub Container Registry
-docker push ghcr.io/OWNER/tiktok-downloader:latest
+docker push ghcr.io/nikolainyegaard/tiktok-downloader:latest
 ```
 
 To authenticate with GHCR, see the [GitHub docs](https://docs.github.com/en/packages/working-with-a-github-packages-registry/working-with-the-container-registry).
@@ -147,6 +146,7 @@ All configuration is via environment variables in `docker-compose.yml`.
 | `WEB_PORT` | `5000` | Port the web UI listens on inside the container. |
 | `DATA_DIR` | `/app/data` | Where the database and cookies.txt are stored. |
 | `VIDEOS_DIR` | `/app/videos` | Where downloaded videos are saved. |
+| `TZ` | `UTC` | Container timezone for log timestamps, e.g. `Europe/Oslo`. |
 | `ms_token` | — | Fallback: provide the raw `msToken` cookie value if not using a cookies file. |
 
 ---

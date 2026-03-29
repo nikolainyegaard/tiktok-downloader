@@ -12,7 +12,8 @@ services:
 
     environment:
       LOOP_INTERVAL_MINUTES: "180"
-      # WEB_PORT: "5000"       # change if needed (also update the expose below)
+      TZ: "Europe/Oslo"          # set your timezone so log timestamps are in local time
+      # WEB_PORT: "5000"         # change if needed (also update the expose below)
       # VIDEOS_DIR: /app/videos  # override video storage path inside the container
 
     # Bind only to localhost so Caddy (running on the host) can reach the service
