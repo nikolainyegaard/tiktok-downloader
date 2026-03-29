@@ -3,15 +3,16 @@ Main download loop and shared state used by both the loop thread and the web ser
 """
 
 import asyncio
+import random
 import threading
 import time
 from collections import deque
-from datetime import datetime
+from datetime import datetime, timezone
 
 import database as db
 from config import get_ms_token
 from tiktok_api import get_user_info, get_user_videos
-from downloader import download_video
+from downloader import download_video, download_photos
 
 # ── Shared state ──────────────────────────────────────────────────────────────
 
@@ -66,10 +67,13 @@ async def _process_all_users(users: list[dict]):
 
     async with TikTokApi() as api:
         await api.create_sessions(
-            ms_tokens=[ms_token], num_sessions=1, sleep_after=3
+            ms_tokens=[ms_token], num_sessions=1, sleep_after=3,
+            browser="webkit",
         )
 
-        for user in users:
+        for idx, user in enumerate(users):
+            if idx > 0:
+                await asyncio.sleep(random.uniform(2, 5))
             tiktok_id = user["tiktok_id"]
 
             with _state_lock:
@@ -128,15 +132,23 @@ async def _process_all_users(users: list[dict]):
                     vid_id, tiktok_id, v["type"],
                     v["description"], v["upload_date"]
                 )
-                path = download_video(
-                    video_id=vid_id,
-                    username=username,
-                    tiktok_id=tiktok_id,
-                    display_name=display_name,
-                    description=v["description"],
-                    upload_date=v["upload_date"],
-                    download_date=int(time.time()),
-                )
+                if v["type"] == "photo" and v.get("image_urls"):
+                    path = download_photos(
+                        video_id=vid_id,
+                        username=username,
+                        image_urls=v["image_urls"],
+                        upload_date=v["upload_date"],
+                    )
+                else:
+                    path = download_video(
+                        video_id=vid_id,
+                        username=username,
+                        tiktok_id=tiktok_id,
+                        display_name=display_name,
+                        description=v["description"],
+                        upload_date=v["upload_date"],
+                        download_date=int(time.time()),
+                    )
                 if path:
                     db.update_video_downloaded(vid_id, path)
 
@@ -157,7 +169,7 @@ async def _process_all_users(users: list[dict]):
 def run_loop():
     with _state_lock:
         loop_state["running"]        = True
-        loop_state["last_run_start"] = datetime.now().isoformat()
+        loop_state["last_run_start"] = datetime.now(timezone.utc).isoformat()
 
     _log("=== Loop started ===")
     users = db.get_all_users()
@@ -173,4 +185,4 @@ def run_loop():
     _log("=== Loop complete ===")
     with _state_lock:
         loop_state["running"]      = False
-        loop_state["last_run_end"] = datetime.now().isoformat()
+        loop_state["last_run_end"] = datetime.now(timezone.utc).isoformat()

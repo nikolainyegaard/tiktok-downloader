@@ -1,3 +1,4 @@
 TikTokApi>=6.0.0
 yt-dlp
 flask
+requests

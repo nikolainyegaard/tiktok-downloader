@@ -1,11 +1,6 @@
 services:
   tiktok-downloader:
-    # Replace with your published image, e.g.:
-    #   docker.io/yourname/tiktok-downloader:latest
-    #   ghcr.io/yourname/tiktok-downloader:latest
-    # To build locally instead: comment `image` and uncomment `build`.
-    image: ghcr.io/OWNER/tiktok-downloader:latest
-    # build: .
+    image: ghcr.io/nikolainyegaard/tiktok-downloader:latest
     container_name: tiktok-downloader
     restart: unless-stopped
 
@@ -16,7 +11,7 @@ services:
       - ./videos:/app/videos
 
     environment:
-      LOOP_INTERVAL_MINUTES: "30"
+      LOOP_INTERVAL_MINUTES: "180"
       # WEB_PORT: "5000"       # change if needed (also update the expose below)
       # VIDEOS_DIR: /app/videos  # override video storage path inside the container
 
