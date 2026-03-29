@@ -1,0 +1,34 @@
+services:
+  tiktok-downloader:
+    # Replace with your published image, e.g.:
+    #   docker.io/yourname/tiktok-downloader:latest
+    #   ghcr.io/yourname/tiktok-downloader:latest
+    # To build locally instead: comment `image` and uncomment `build`.
+    image: ghcr.io/OWNER/tiktok-downloader:latest
+    # build: .
+    container_name: tiktok-downloader
+    restart: unless-stopped
+
+    volumes:
+      # Database and cookies.txt are stored here — back this up.
+      - ./data:/app/data
+      # Downloaded videos are stored here.
+      - ./videos:/app/videos
+
+    environment:
+      LOOP_INTERVAL_MINUTES: "30"
+      # WEB_PORT: "5000"       # change if needed (also update the expose below)
+      # VIDEOS_DIR: /app/videos  # override video storage path inside the container
+
+    # Bind only to localhost so Caddy (running on the host) can reach the service
+    # but it is not directly exposed to the internet.
+    #
+    # Caddyfile reverse_proxy entry:
+    #   reverse_proxy localhost:5000
+    #
+    # If Caddy is also a Docker container on the same host, put both services on
+    # a shared network instead and reference the service name as the upstream:
+    #   reverse_proxy tiktok-downloader:5000
+    # Then remove the `ports` block below and use `expose` instead.
+    ports:
+      - "127.0.0.1:5000:5000"

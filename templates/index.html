@@ -1,0 +1,616 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>TikTok Downloader</title>
+  <style>
+    :root {
+      --bg:        #111214;
+      --surface:   #1c1e21;
+      --surface2:  #252830;
+      --border:    #2e3138;
+      --accent:    #4f8ef7;
+      --accent-h:  #3a78e8;
+      --red:       #e05252;
+      --green:     #4caf7d;
+      --yellow:    #e0a83a;
+      --muted:     #6b717f;
+      --text:      #dde1ea;
+      --text-dim:  #9499a5;
+      --radius:    8px;
+      --mono:      "SF Mono", "Fira Code", "Cascadia Code", monospace;
+    }
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      font-size: 14px;
+      line-height: 1.5;
+      min-height: 100vh;
+    }
+
+    .app {
+      max-width: 1100px;
+      margin: 0 auto;
+      padding: 24px 20px 60px;
+      display: grid;
+      gap: 24px;
+    }
+
+    /* ── Header ──────────────────────────────────────────────────────────────── */
+
+    header {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      flex-wrap: wrap;
+    }
+
+    header h1 { font-size: 20px; font-weight: 700; letter-spacing: -0.3px; }
+
+    .status-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 10px;
+      border-radius: 99px;
+      font-size: 12px;
+      font-weight: 600;
+      background: var(--surface2);
+      color: var(--muted);
+    }
+    .status-badge .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--muted); }
+    .status-badge.running { color: var(--green); }
+    .status-badge.running .dot { background: var(--green); animation: pulse 1.2s infinite; }
+
+    @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
+
+    .header-meta {
+      margin-left: auto;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      color: var(--text-dim);
+      font-size: 13px;
+      flex-wrap: wrap;
+    }
+
+    /* ── Buttons ─────────────────────────────────────────────────────────────── */
+
+    button {
+      cursor: pointer;
+      border: none;
+      border-radius: var(--radius);
+      font-size: 13px;
+      font-weight: 600;
+      padding: 7px 14px;
+      transition: background 0.15s, opacity 0.15s;
+    }
+    button:disabled { opacity: 0.45; cursor: default; }
+
+    .btn-primary { background: var(--accent); color: #fff; }
+    .btn-primary:hover:not(:disabled) { background: var(--accent-h); }
+
+    .btn-danger { background: transparent; color: var(--red); border: 1px solid var(--red); padding: 5px 10px; font-size: 12px; }
+    .btn-danger:hover:not(:disabled) { background: rgba(224,82,82,.12); }
+
+    .btn-ghost { background: var(--surface2); color: var(--text); }
+    .btn-ghost:hover:not(:disabled) { background: var(--border); }
+
+    /* ── Section title ───────────────────────────────────────────────────────── */
+
+    .section-title {
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin-bottom: 12px;
+    }
+
+    /* ── Cookie card ─────────────────────────────────────────────────────────── */
+
+    .cookie-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 16px;
+      display: flex;
+      align-items: center;
+      gap: 20px;
+      flex-wrap: wrap;
+    }
+
+    .cookie-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      padding: 5px 12px;
+      border-radius: 99px;
+      font-size: 12px;
+      font-weight: 600;
+      white-space: nowrap;
+    }
+    .cookie-pill.present { background: rgba(76,175,125,.15); color: var(--green); }
+    .cookie-pill.absent  { background: rgba(224,82,82,.15);  color: var(--red); }
+    .cookie-pill .dot    { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+
+    .cookie-meta { font-size: 12px; color: var(--text-dim); }
+
+    .cookie-actions { margin-left: auto; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+
+    .cookie-upload-label {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: var(--accent);
+      color: #fff;
+      border-radius: var(--radius);
+      padding: 7px 14px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.15s;
+    }
+    .cookie-upload-label:hover { background: var(--accent-h); }
+
+    .cookie-note {
+      width: 100%;
+      font-size: 12px;
+      color: var(--muted);
+      border-top: 1px solid var(--border);
+      padding-top: 12px;
+      margin-top: 4px;
+      line-height: 1.5;
+    }
+    .cookie-note code {
+      font-family: var(--mono);
+      background: var(--surface2);
+      padding: 1px 5px;
+      border-radius: 4px;
+      font-size: 11px;
+    }
+
+    /* ── Add-user form ───────────────────────────────────────────────────────── */
+
+    .add-form { display: flex; gap: 8px; align-items: center; }
+
+    .add-form input {
+      flex: 1;
+      max-width: 360px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      color: var(--text);
+      font-size: 14px;
+      padding: 8px 12px;
+      outline: none;
+      transition: border-color 0.15s;
+    }
+    .add-form input:focus { border-color: var(--accent); }
+    .add-form input::placeholder { color: var(--muted); }
+
+    .add-status { font-size: 13px; padding: 4px 0; min-height: 20px; }
+    .add-status.error { color: var(--red); }
+    .add-status.ok    { color: var(--green); }
+    .add-status.info  { color: var(--muted); }
+
+    /* ── User grid ───────────────────────────────────────────────────────────── */
+
+    .users-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+      gap: 12px;
+    }
+
+    .user-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .user-card-top {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 8px;
+    }
+
+    .user-name-line { display: flex; align-items: baseline; gap: 6px; flex-wrap: wrap; }
+    .user-display-name { font-weight: 700; font-size: 16px; }
+    .user-username     { font-weight: 400; font-size: 14px; color: var(--text-dim); }
+    .user-id-line      { font-family: var(--mono); font-size: 11px; color: var(--muted); margin-top: 3px; line-height: 1.6; }
+
+    .user-stats { display: flex; gap: 16px; font-size: 12px; color: var(--text-dim); flex-wrap: wrap; }
+    .stat-item strong { color: var(--text); }
+
+    .account-status { display: inline-block; font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 99px; }
+    .account-status.active  { background: rgba(76,175,125,.15); color: var(--green); }
+    .account-status.banned  { background: rgba(224,82,82,.15);  color: var(--red); }
+    .account-status.unknown { background: var(--surface2); color: var(--muted); }
+
+    .user-bio { font-size: 12px; color: var(--text-dim); line-height: 1.4; max-height: 40px; overflow: hidden; text-overflow: ellipsis; }
+    .user-checked { font-size: 11px; color: var(--muted); }
+    .user-card-current { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+
+    .empty-state { color: var(--muted); padding: 32px 0; text-align: center; }
+
+    /* ── Log panel ───────────────────────────────────────────────────────────── */
+
+    .log-panel { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
+
+    .log-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 10px 14px;
+      border-bottom: 1px solid var(--border);
+    }
+    .log-header .section-title { margin: 0; }
+
+    .log-body {
+      font-family: var(--mono);
+      font-size: 12px;
+      color: var(--text-dim);
+      line-height: 1.6;
+      padding: 12px 14px;
+      height: 280px;
+      overflow-y: auto;
+      white-space: pre-wrap;
+      word-break: break-all;
+    }
+    .log-body .log-sep  { color: var(--accent); }
+    .log-body .log-err  { color: var(--red); }
+    .log-body .log-warn { color: var(--yellow); }
+    .log-body .log-dl   { color: var(--green); }
+  </style>
+</head>
+<body>
+<div class="app">
+
+  <!-- Header -->
+  <header>
+    <h1>TikTok Downloader</h1>
+    <span class="status-badge" id="statusBadge">
+      <span class="dot"></span>
+      <span id="statusText">Idle</span>
+    </span>
+    <div class="header-meta">
+      <span id="lastRun"></span>
+      <span id="nextRun"></span>
+      <button class="btn-primary" id="triggerBtn" onclick="triggerLoop()">Run Now</button>
+    </div>
+  </header>
+
+  <!-- Authentication -->
+  <section>
+    <div class="section-title">Authentication</div>
+    <div class="cookie-card" id="cookieCard">
+      <span class="cookie-pill absent" id="cookiePill">
+        <span class="dot"></span>
+        <span id="cookiePillText">No cookies file</span>
+      </span>
+      <span class="cookie-meta" id="cookieMeta"></span>
+      <div class="cookie-actions">
+        <label class="cookie-upload-label">
+          <input type="file" id="cookieFileInput" accept=".txt,text/plain" style="display:none" onchange="uploadCookies(this)">
+          Upload cookies.txt
+        </label>
+        <button class="btn-danger" id="cookieDeleteBtn" onclick="deleteCookies()" style="display:none">Remove</button>
+      </div>
+      <div class="cookie-note">
+        Export your TikTok cookies using a browser extension such as
+        <strong>Get cookies.txt LOCALLY</strong> (Chrome/Firefox).
+        The file must be in Netscape format and include the <code>msToken</code> cookie.
+        Cookies are stored server-side — uploading once from any device applies everywhere.
+      </div>
+    </div>
+  </section>
+
+  <!-- Add user -->
+  <section>
+    <div class="section-title">Track a user</div>
+    <div class="add-form">
+      <input
+        type="text"
+        id="usernameInput"
+        placeholder="@username"
+        onkeydown="if(event.key==='Enter') addUser()"
+        autocomplete="off"
+        spellcheck="false"
+      />
+      <button class="btn-primary" id="addBtn" onclick="addUser()">Add</button>
+    </div>
+    <div class="add-status" id="addStatus"></div>
+  </section>
+
+  <!-- User list -->
+  <section>
+    <div class="section-title">Tracked users (<span id="userCount">0</span>)</div>
+    <div class="users-grid" id="usersGrid">
+      <div class="empty-state">No users tracked yet.</div>
+    </div>
+  </section>
+
+  <!-- Log -->
+  <section>
+    <div class="log-panel">
+      <div class="log-header">
+        <span class="section-title">Log</span>
+        <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--muted);cursor:pointer;">
+          <input type="checkbox" id="autoScroll" checked style="accent-color:var(--accent)">
+          Auto-scroll
+        </label>
+      </div>
+      <div class="log-body" id="logBody"></div>
+    </div>
+  </section>
+
+</div>
+<script>
+  const fmt = {
+    rel: ts => {
+      if (!ts) return '—';
+      const diff = Math.round((Date.now() - new Date(ts)) / 1000);
+      if (diff < 60)   return `${diff}s ago`;
+      if (diff < 3600) return `${Math.round(diff/60)}m ago`;
+      return `${Math.round(diff/3600)}h ago`;
+    },
+    relFuture: ts => {
+      if (!ts) return '—';
+      const diff = Math.round((new Date(ts) - Date.now()) / 1000);
+      if (diff <= 0)   return 'soon';
+      if (diff < 60)   return `in ${diff}s`;
+      if (diff < 3600) return `in ${Math.round(diff/60)}m`;
+      return `in ${Math.round(diff/3600)}h`;
+    },
+    date: unix => {
+      if (!unix) return '—';
+      return new Date(unix * 1000).toLocaleString();
+    },
+  };
+
+  // ── State ────────────────────────────────────────────────────────────────────
+
+  let users       = [];
+  let currentUser = null;
+  let isRunning   = false;
+  let logLines    = [];
+
+  // ── Helpers ───────────────────────────────────────────────────────────────────
+
+  async function apiJSON(path, opts = {}) {
+    const r = await fetch(path, {
+      headers: { 'Content-Type': 'application/json' },
+      ...opts,
+    });
+    return { ok: r.ok, status: r.status, data: await r.json().catch(() => ({})) };
+  }
+
+  function esc(s) {
+    if (!s) return '';
+    return String(s)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  }
+
+  // ── Cookie management ─────────────────────────────────────────────────────────
+
+  function renderCookies(info) {
+    const pill    = document.getElementById('cookiePill');
+    const pillTxt = document.getElementById('cookiePillText');
+    const meta    = document.getElementById('cookieMeta');
+    const delBtn  = document.getElementById('cookieDeleteBtn');
+
+    if (info.present) {
+      pill.className    = 'cookie-pill present';
+      pillTxt.textContent = 'Cookies loaded';
+      meta.textContent  = `Updated ${fmt.rel(new Date(info.updated_at * 1000).toISOString())}  ·  ${(info.size_bytes / 1024).toFixed(1)} KB`;
+      delBtn.style.display = '';
+    } else {
+      pill.className    = 'cookie-pill absent';
+      pillTxt.textContent = 'No cookies file';
+      meta.textContent  = '';
+      delBtn.style.display = 'none';
+    }
+  }
+
+  async function uploadCookies(input) {
+    if (!input.files.length) return;
+    const form = new FormData();
+    form.append('file', input.files[0]);
+    input.value = '';
+
+    const r    = await fetch('/api/cookies', { method: 'POST', body: form });
+    const data = await r.json().catch(() => ({}));
+    if (r.ok) {
+      renderCookies(data);
+    } else {
+      alert(data.error || 'Upload failed');
+    }
+  }
+
+  async function deleteCookies() {
+    if (!confirm('Remove the stored cookies file?')) return;
+    const { ok } = await apiJSON('/api/cookies', { method: 'DELETE' });
+    if (ok) loadCookies();
+  }
+
+  async function loadCookies() {
+    const { ok, data } = await apiJSON('/api/cookies');
+    if (ok) renderCookies(data);
+  }
+
+  // ── Users ─────────────────────────────────────────────────────────────────────
+
+  function renderUsers() {
+    const grid = document.getElementById('usersGrid');
+    document.getElementById('userCount').textContent = users.length;
+
+    if (!users.length) {
+      grid.innerHTML = '<div class="empty-state">No users tracked yet.</div>';
+      return;
+    }
+
+    grid.innerHTML = users.map(u => {
+      const isCurrent = u.username === currentUser;
+      const status    = u.account_status || 'unknown';
+      const checked   = u.last_checked
+        ? `Last checked ${fmt.rel(new Date(u.last_checked * 1000).toISOString())}`
+        : 'Never checked';
+
+      const oldNames = (u.old_usernames || []).map(n => `@${esc(n)}`).join(' ');
+      const idLine   = `id:${esc(u.tiktok_id)}${oldNames ? ` | ${oldNames}` : ''}`;
+
+      return `
+        <div class="user-card${isCurrent ? ' user-card-current' : ''}">
+          <div class="user-card-top">
+            <div>
+              <div class="user-name-line">
+                <span class="user-display-name">${esc(u.display_name || u.username)}</span>
+                <span class="user-username">(@${esc(u.username)})</span>
+              </div>
+              <div class="user-id-line">${idLine}</div>
+            </div>
+            <div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px">
+              <span class="account-status ${status}">${status}</span>
+              <button class="btn-danger" onclick="removeUser('${esc(u.tiktok_id)}','@${esc(u.username)}')">Remove</button>
+            </div>
+          </div>
+
+          ${u.bio ? `<div class="user-bio">${esc(u.bio)}</div>` : ''}
+
+          <div class="user-stats">
+            <span class="stat-item"><strong>${(u.follower_count||0).toLocaleString()}</strong> followers</span>
+            <span class="stat-item"><strong>${u.video_total||0}</strong> saved</span>
+            ${u.video_deleted   ? `<span class="stat-item" style="color:var(--red)"><strong>${u.video_deleted}</strong> deleted</span>` : ''}
+            ${u.video_undeleted ? `<span class="stat-item" style="color:var(--yellow)"><strong>${u.video_undeleted}</strong> restored</span>` : ''}
+          </div>
+
+          <div class="user-checked">${checked}</div>
+        </div>
+      `;
+    }).join('');
+  }
+
+  async function addUser() {
+    const input  = document.getElementById('usernameInput');
+    const status = document.getElementById('addStatus');
+    const btn    = document.getElementById('addBtn');
+    const name   = input.value.trim().replace(/^@/, '');
+    if (!name) return;
+
+    btn.disabled = true;
+    status.className   = 'add-status info';
+    status.textContent = `Looking up @${name}…`;
+
+    const { ok, data } = await apiJSON('/api/users', {
+      method: 'POST',
+      body: JSON.stringify({ username: name }),
+    });
+    btn.disabled = false;
+
+    if (ok) {
+      status.className   = 'add-status ok';
+      status.textContent = `Added @${data.user?.username || name}`;
+      input.value        = '';
+      loadUsers();
+      setTimeout(() => { status.textContent = ''; }, 4000);
+    } else {
+      status.className   = 'add-status error';
+      status.textContent = data.error || 'Unknown error';
+    }
+  }
+
+  async function removeUser(tiktokId, label) {
+    if (!confirm(`Stop tracking ${label}?\n(Downloaded files will not be deleted.)`)) return;
+    await apiJSON(`/api/users/${tiktokId}`, { method: 'DELETE' });
+    loadUsers();
+  }
+
+  async function loadUsers() {
+    const { ok, data } = await apiJSON('/api/users');
+    if (ok) { users = data; renderUsers(); }
+  }
+
+  // ── Loop ──────────────────────────────────────────────────────────────────────
+
+  function renderStatus(state) {
+    isRunning   = state.running;
+    currentUser = state.current_user;
+
+    const badge = document.getElementById('statusBadge');
+    const text  = document.getElementById('statusText');
+    badge.className = `status-badge${isRunning ? ' running' : ''}`;
+    text.textContent = isRunning
+      ? (currentUser ? `Downloading @${currentUser}` : 'Running…')
+      : 'Idle';
+
+    document.getElementById('lastRun').textContent = state.last_run_end
+      ? `Last: ${fmt.rel(state.last_run_end)}` : '';
+    document.getElementById('nextRun').textContent = (!isRunning && state.next_run)
+      ? `Next: ${fmt.relFuture(state.next_run)}` : '';
+
+    document.getElementById('triggerBtn').disabled = isRunning;
+  }
+
+  function renderLogs(lines) {
+    if (!lines?.length) return;
+    const newLines = lines.slice(logLines.length);
+    if (!newLines.length) return;
+    logLines = lines;
+
+    const body       = document.getElementById('logBody');
+    const autoScroll = document.getElementById('autoScroll').checked;
+
+    newLines.forEach(line => {
+      const span = document.createElement('span');
+      if      (line.includes('=== Loop'))            span.className = 'log-sep';
+      else if (/error|failed|unexpected/i.test(line)) span.className = 'log-err';
+      else if (/warn|deleted|corrupt/i.test(line))    span.className = 'log-warn';
+      else if (/download|saved/i.test(line))          span.className = 'log-dl';
+      span.textContent = line + '\n';
+      body.appendChild(span);
+    });
+
+    if (autoScroll) body.scrollTop = body.scrollHeight;
+  }
+
+  async function triggerLoop() {
+    const btn = document.getElementById('triggerBtn');
+    btn.disabled = true;
+    const { ok, data } = await apiJSON('/api/trigger', { method: 'POST' });
+    if (!ok) {
+      alert(data.error || 'Could not trigger loop');
+      btn.disabled = false;
+    }
+  }
+
+  async function loadStatus() {
+    const { ok, data } = await apiJSON('/api/status');
+    if (ok) {
+      renderStatus(data);
+      renderLogs(data.logs);
+      renderUsers();
+    }
+  }
+
+  // ── Init ──────────────────────────────────────────────────────────────────────
+
+  loadCookies();
+  loadUsers();
+  loadStatus();
+  setInterval(loadCookies, 30000);
+  setInterval(loadUsers,   15000);
+  setInterval(loadStatus,   5000);
+</script>
+</body>
+</html>

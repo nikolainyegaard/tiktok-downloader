@@ -1,0 +1,112 @@
+from __future__ import annotations
+
+import os
+import time
+import yt_dlp
+from datetime import datetime
+from typing import Any
+from yt_dlp.utils import DownloadError
+
+from config import VIDEOS_DIR, COOKIES_PATH
+
+MIN_VALID_SIZE_BYTES = 10_000
+
+
+def _ts():
+    return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+
+def download_video(*, video_id: str, username: str, tiktok_id: str,
+                   display_name: str, description: str,
+                   upload_date: int, download_date: int) -> str | None:
+    """
+    Download a TikTok video using yt-dlp and embed metadata into the file.
+    Returns the final file path on success, None on failure.
+    """
+    author_folder = os.path.join(VIDEOS_DIR, f"@{username}")
+    os.makedirs(author_folder, exist_ok=True)
+
+    output_template = os.path.join(author_folder, f"{video_id}.%(ext)s")
+    video_url = f"https://www.tiktok.com/@{username}/video/{video_id}"
+
+    upload_str   = (datetime.fromtimestamp(upload_date).strftime("%Y-%m-%d")
+                    if upload_date else "")
+    download_str = datetime.fromtimestamp(download_date).strftime("%Y-%m-%d %H:%M:%S")
+
+    ydl_opts: dict[str, Any] = {
+        "outtmpl":             output_template,
+        "format":              "bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best",
+        "merge_output_format": "mp4",
+        "socket_timeout":      30,
+        "retries":             3,
+        "quiet":               True,
+        "no_warnings":         False,
+        **({"cookiefile": COOKIES_PATH} if os.path.exists(COOKIES_PATH) else {}),
+        "postprocessors": [
+            {"key": "FFmpegMetadata", "add_metadata": True},
+        ],
+        "postprocessor_args": {
+            "ffmpegmetadata": [
+                "-metadata", f"title={description or ''}",
+                "-metadata", f"artist={username}",
+                "-metadata", f"album_artist={display_name or username}",
+                "-metadata", f"date={upload_str}",
+                "-metadata", (
+                    f"comment="
+                    f"video_id={video_id}|"
+                    f"author_id={tiktok_id}|"
+                    f"author_username={username}|"
+                    f"author_display_name={display_name or ''}|"
+                    f"upload_date={upload_str}|"
+                    f"download_date={download_str}"
+                ),
+            ]
+        },
+    }
+
+    print(f"[{_ts()}] Downloading {video_id} from @{username}...")
+    try:
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:  # type: ignore[arg-type]
+            ydl.download([video_url])
+    except DownloadError as e:
+        print(f"[{_ts()}] yt-dlp error for {video_id}: {e}")
+        _remove_corrupt(author_folder, video_id)
+        return None
+    except Exception as e:
+        print(f"[{_ts()}] Unexpected error for {video_id} ({type(e).__name__}): {e}")
+        _remove_corrupt(author_folder, video_id)
+        return None
+
+    actual_path = _find_output(author_folder, video_id)
+    if actual_path is None:
+        print(f"[{_ts()}] Output file not found after download of {video_id}")
+        return None
+
+    file_size = os.path.getsize(actual_path)
+    if file_size < MIN_VALID_SIZE_BYTES:
+        print(f"[{_ts()}] File too small ({file_size} bytes) for {video_id}, removing.")
+        os.remove(actual_path)
+        return None
+
+    print(f"[{_ts()}] Saved {video_id} ({file_size:,} bytes) → {actual_path}")
+    return actual_path
+
+
+def _get_video_files(folder: str, video_id: str) -> list[str]:
+    """Return paths of all files in folder whose name starts with video_id."""
+    return [
+        os.path.join(folder, fname)
+        for fname in os.listdir(folder)
+        if fname.startswith(video_id)
+    ]
+
+
+def _find_output(folder: str, video_id: str) -> str | None:
+    files = _get_video_files(folder, video_id)
+    return files[0] if files else None
+
+
+def _remove_corrupt(folder: str, video_id: str):
+    for fpath in _get_video_files(folder, video_id):
+        if os.path.getsize(fpath) < MIN_VALID_SIZE_BYTES:
+            os.remove(fpath)
