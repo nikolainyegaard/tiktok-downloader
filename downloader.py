@@ -152,6 +152,37 @@ def _get_video_files(folder: str, video_id: str) -> list[str]:
     ]
 
 
+def prefix_video_files(video_id: str, username: str) -> str | None:
+    """Add del_ prefix to all files for video_id. Returns new path of first file."""
+    folder = os.path.join(VIDEOS_DIR, f"@{username}")
+    if not os.path.isdir(folder):
+        return None
+    files = sorted(_get_video_files(folder, video_id))
+    new_first = None
+    for fpath in files:
+        new_path = os.path.join(folder, f"del_{os.path.basename(fpath)}")
+        os.rename(fpath, new_path)
+        if new_first is None:
+            new_first = new_path
+    return new_first
+
+
+def unprefix_video_files(video_id: str, username: str) -> str | None:
+    """Remove del_ prefix from all files for video_id. Returns new path of first file."""
+    folder = os.path.join(VIDEOS_DIR, f"@{username}")
+    if not os.path.isdir(folder):
+        return None
+    files = sorted(_get_video_files(folder, f"del_{video_id}"))
+    new_first = None
+    for fpath in files:
+        new_fname = os.path.basename(fpath)[4:]  # strip "del_"
+        new_path  = os.path.join(folder, new_fname)
+        os.rename(fpath, new_path)
+        if new_first is None:
+            new_first = new_path
+    return new_first
+
+
 def _find_output(folder: str, video_id: str) -> str | None:
     files = _get_video_files(folder, video_id)
     return files[0] if files else None
