@@ -1,8 +1,12 @@
 """
-Thin wrappers around TikTokApi.
-All functions accept an already-initialised api object so a single session
-can be reused across multiple calls within one loop iteration.
+TikTok data fetching.
+- get_user_info:    TikTokApi (Playwright) — user profile metadata
+- get_user_videos:  yt-dlp flat extraction — full video list, no Playwright
+- get_video_details: curl_cffi HTTP request — type + image URLs for a single video
 """
+
+import json
+import re
 
 
 async def get_user_info(api, username: str) -> dict:
@@ -16,35 +20,123 @@ async def get_user_info(api, username: str) -> dict:
         raise ValueError(f"No user data returned for @{username}")
 
     return {
-        "tiktok_id":      u.get("id"),
-        "username":       u.get("uniqueId", username),
-        "display_name":   u.get("nickname"),
-        "bio":            u.get("signature"),
-        "join_date":      u.get("createTime"),
-        "follower_count": s.get("followerCount", 0),
+        "tiktok_id":       u.get("id"),
+        "username":        u.get("uniqueId", username),
+        "display_name":    u.get("nickname"),
+        "bio":             u.get("signature"),
+        "join_date":       u.get("createTime"),
+        "follower_count":  s.get("followerCount", 0),
         "following_count": s.get("followingCount", 0),
-        "video_count":    s.get("videoCount", 0),
+        "video_count":     s.get("videoCount", 0),
         # 'secret' flag is set on private / banned accounts
-        "account_status": "banned" if u.get("secret") else "active",
+        "account_status":  "banned" if u.get("secret") else "active",
     }
 
 
-async def get_user_videos(api, username: str, count: int = 3000) -> list[dict]:
-    """Fetch all visible videos from a user's profile."""
+def get_user_videos(username: str, cookies_path: str | None = None) -> list[dict]:
+    """
+    List all visible videos from a TikTok user profile using yt-dlp.
+
+    Uses yt-dlp's flat playlist extraction which calls TikTok's
+    /api/creator/item_list/ JSON endpoint via curl_cffi — no Playwright needed.
+
+    Returns [{video_id, description, upload_date}].
+    Type and image_urls are resolved later by get_video_details() for new videos.
+    """
+    import yt_dlp
+
+    ydl_opts = {
+        "quiet":        True,
+        "no_warnings":  True,
+        "extract_flat": True,
+    }
+    if cookies_path:
+        ydl_opts["cookiefile"] = cookies_path
+
+    url    = f"https://www.tiktok.com/@{username}"
     videos = []
-    async for video in api.user(username=username).videos(count=count):
-        d = video.as_dict
-        image_urls: list[str] = []
-        if d.get("imagePost"):
-            for img in d["imagePost"].get("images", []):
-                url_list = img.get("imageURL", {}).get("urlList", [])
-                if url_list:
-                    image_urls.append(url_list[0])
-        videos.append({
-            "video_id":    d.get("id"),
-            "description": d.get("desc", ""),
-            "upload_date": d.get("createTime"),
-            "type":        "photo" if d.get("imagePost") else "video",
-            "image_urls":  image_urls,
-        })
+
+    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+        info = ydl.extract_info(url, download=False)
+        for entry in (info or {}).get("entries") or []:
+            if not entry or not entry.get("id"):
+                continue
+            videos.append({
+                "video_id":    entry["id"],
+                "description": entry.get("title") or "",
+                "upload_date": entry.get("timestamp"),
+            })
+
     return videos
+
+
+def get_video_details(video_id: str, username: str, cookies: dict) -> dict:
+    """
+    Fetch type and image URLs for a single video via a direct HTTP request —
+    no Playwright. Parses TikTok's __UNIVERSAL_DATA_FOR_REHYDRATION__ JSON
+    embedded in the page HTML.
+
+    Returns {type, description, upload_date, image_urls}.
+    """
+    from curl_cffi import requests as curl_requests
+
+    url = f"https://www.tiktok.com/@{username}/video/{video_id}"
+    headers = {
+        "User-Agent": (
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+            "AppleWebKit/537.36 (KHTML, like Gecko) "
+            "Chrome/120.0.0.0 Safari/537.36"
+        ),
+        "Referer":         "https://www.tiktok.com/",
+        "Accept-Language": "en-US,en;q=0.9",
+    }
+
+    resp = curl_requests.get(
+        url, headers=headers, cookies=cookies,
+        impersonate="chrome120", timeout=30,
+    )
+
+    match = re.search(
+        r'<script[^>]+\bid=["\']__UNIVERSAL_DATA_FOR_REHYDRATION__["\'][^>]*>'
+        r'([^<]+)</script>',
+        resp.text,
+    )
+    if not match:
+        raise RuntimeError("Could not find page data in TikTok response")
+
+    data = json.loads(match.group(1))
+    item = (
+        data
+        .get("__DEFAULT_SCOPE__", {})
+        .get("webapp.video-detail", {})
+        .get("itemInfo", {})
+        .get("itemStruct", {})
+    )
+    if not item:
+        raise RuntimeError("No item data in TikTok page response")
+
+    try:
+        upload_date = int(item.get("createTime") or 0) or None
+    except (ValueError, TypeError):
+        upload_date = None
+
+    image_post = item.get("imagePost")
+    if image_post:
+        image_urls = [
+            img["imageURL"]["urlList"][0]
+            for img in image_post.get("images", [])
+            if img.get("imageURL", {}).get("urlList")
+        ]
+        return {
+            "type":        "photo",
+            "description": item.get("desc", ""),
+            "upload_date": upload_date,
+            "image_urls":  image_urls,
+        }
+
+    return {
+        "type":        "video",
+        "description": item.get("desc", ""),
+        "upload_date": upload_date,
+        "image_urls":  [],
+    }

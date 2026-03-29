@@ -35,6 +35,69 @@ def get_ms_token() -> str | None:
     return os.environ.get("ms_token")
 
 
+def get_cookies_flat() -> dict:
+    """
+    Return TikTok cookies as a flat {name: value} dict for TikTokApi's
+    cookies= parameter.  TikTokApi picks one element from the list you pass,
+    merges ms_token into it, then formats it for Playwright internally.
+    """
+    result = {}
+    try:
+        with open(COOKIES_PATH, encoding="utf-8", errors="ignore") as f:
+            for line in f:
+                stripped = line.strip()
+                if not stripped:
+                    continue
+                if stripped.startswith("#HttpOnly_"):
+                    stripped = stripped[len("#HttpOnly_"):]
+                elif stripped.startswith("#"):
+                    continue
+                parts = stripped.split("\t")
+                if len(parts) != 7:
+                    continue
+                _domain, _flag, _path, _secure, _expiry, name, value = parts
+                result[str(name)] = str(value)
+    except FileNotFoundError:
+        pass
+    return result
+
+
+def get_cookies_for_playwright() -> list[dict]:
+    """
+    Parse cookies.txt and return a list of Playwright-format cookie dicts
+    suitable for passing to TikTokApi's create_sessions(cookies=[...]).
+    """
+    result = []
+    try:
+        with open(COOKIES_PATH, encoding="utf-8", errors="ignore") as f:
+            for line in f:
+                stripped = line.strip()
+                if not stripped:
+                    continue
+                if stripped.startswith("#HttpOnly_"):
+                    stripped = stripped[len("#HttpOnly_"):]
+                elif stripped.startswith("#"):
+                    continue
+                parts = stripped.split("\t")
+                if len(parts) != 7:
+                    continue
+                domain, _, path, secure, expiry, name, value = parts
+                try:
+                    expires = float(expiry)
+                except (ValueError, TypeError):
+                    expires = -1.0
+                result.append({
+                    "name":    str(name),
+                    "value":   str(value),
+                    "domain":  str(domain),
+                    "path":    str(path),
+                    "expires": expires,
+                })
+    except FileNotFoundError:
+        pass
+    return result
+
+
 def cookies_info() -> dict:
     """Return metadata about the current cookies file."""
     if not os.path.exists(COOKIES_PATH):
