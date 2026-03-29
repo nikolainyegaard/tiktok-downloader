@@ -199,6 +199,21 @@
     .add-status.ok    { color: var(--green); }
     .add-status.info  { color: var(--muted); }
 
+    .pending-list { display: flex; flex-direction: column; gap: 4px; margin-top: 6px; }
+    .pending-item { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--muted); }
+    .pending-item.error { color: var(--red); }
+    .pending-item.error button {
+      background: none; border: none; color: var(--red); cursor: pointer;
+      font-size: 15px; padding: 0 4px; opacity: 0.7; border-radius: 4px; line-height: 1;
+    }
+    .pending-item.error button:hover { opacity: 1; background: rgba(224,82,82,.12); }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .spinner {
+      width: 11px; height: 11px; flex-shrink: 0;
+      border: 2px solid var(--border); border-top-color: var(--accent);
+      border-radius: 50%; animation: spin 0.8s linear infinite;
+    }
+
     /* ── User grid ───────────────────────────────────────────────────────────── */
 
     .users-grid {
@@ -324,12 +339,14 @@
         id="usernameInput"
         placeholder="@username"
         onkeydown="if(event.key==='Enter') addUser()"
+        oninput="this.value=this.value.replace(/[^a-zA-Z0-9_.@]/g,'')"
         autocomplete="off"
         spellcheck="false"
       />
       <button class="btn-primary" id="addBtn" onclick="addUser()">Add</button>
     </div>
     <div class="add-status" id="addStatus"></div>
+    <div class="pending-list" id="pendingList"></div>
   </section>
 
   <!-- User list -->
@@ -345,10 +362,13 @@
     <div class="log-panel">
       <div class="log-header">
         <span class="section-title">Log</span>
-        <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--muted);cursor:pointer;">
-          <input type="checkbox" id="autoScroll" checked style="accent-color:var(--accent)">
-          Auto-scroll
-        </label>
+        <div style="display:flex;align-items:center;gap:12px;">
+          <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--muted);cursor:pointer;">
+            <input type="checkbox" id="autoScroll" checked style="accent-color:var(--accent)">
+            Auto-scroll
+          </label>
+          <button class="btn-ghost" onclick="clearLog()" style="font-size:11px;padding:3px 8px;">Clear</button>
+        </div>
       </div>
       <div class="log-body" id="logBody"></div>
     </div>
@@ -380,10 +400,13 @@
 
   // ── State ────────────────────────────────────────────────────────────────────
 
-  let users       = [];
-  let currentUser = null;
-  let isRunning   = false;
-  let logLines    = [];
+  let users         = [];
+  let currentUser   = null;
+  let isRunning     = false;
+  let logLines      = [];
+  let logClearIndex = 0;
+  let pending       = {};
+  const dismissed   = new Set();
 
   // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -501,33 +524,57 @@
     }).join('');
   }
 
+  function renderPending() {
+    const container = document.getElementById('pendingList');
+    const entries   = Object.entries(pending).filter(([u]) => !dismissed.has(u));
+    if (!entries.length) { container.innerHTML = ''; return; }
+    container.innerHTML = entries.map(([uname, info]) => {
+      if (info.status === 'pending') {
+        return `<div class="pending-item"><span class="spinner"></span>Looking up @${esc(uname)}…</div>`;
+      }
+      return `<div class="pending-item error">Failed to add @${esc(uname)}: ${esc(info.message)} <button onclick="dismissPending('${esc(uname)}')" title="Dismiss">×</button></div>`;
+    }).join('');
+  }
+
+  function dismissPending(username) {
+    dismissed.add(username);
+    renderPending();
+  }
+
+  async function loadQueue() {
+    const { ok, data } = await apiJSON('/api/queue');
+    if (!ok) return;
+    // Remove entries that are no longer in server pending (successfully added)
+    for (const u of Object.keys(pending)) {
+      if (!(u in data) && !dismissed.has(u)) delete pending[u];
+    }
+    // Merge in current server state
+    for (const [u, info] of Object.entries(data)) {
+      if (!dismissed.has(u)) pending[u] = info;
+    }
+    renderPending();
+  }
+
   async function addUser() {
-    const input  = document.getElementById('usernameInput');
-    const status = document.getElementById('addStatus');
-    const btn    = document.getElementById('addBtn');
-    const name   = input.value.trim().replace(/^@/, '');
+    const input = document.getElementById('usernameInput');
+    const name  = input.value.trim().replace(/^@/, '').replace(/[^a-zA-Z0-9_.]/g, '');
     if (!name) return;
 
-    btn.disabled = true;
-    status.className   = 'add-status info';
-    status.textContent = `Looking up @${name}…`;
+    input.value = '';
+    input.focus();
 
     const { ok, data } = await apiJSON('/api/users', {
       method: 'POST',
       body: JSON.stringify({ username: name }),
     });
-    btn.disabled = false;
 
     if (ok) {
-      status.className   = 'add-status ok';
-      status.textContent = `Added @${data.user?.username || name}`;
-      input.value        = '';
-      loadUsers();
-      setTimeout(() => { status.textContent = ''; }, 4000);
+      dismissed.delete(name);
+      pending[name] = { status: 'pending' };
     } else {
-      status.className   = 'add-status error';
-      status.textContent = data.error || 'Unknown error';
+      pending[name] = { status: 'error', message: data.error || 'Request failed' };
     }
+    renderPending();
   }
 
   async function removeUser(tiktokId, label) {
@@ -555,18 +602,24 @@
       : 'Idle';
 
     document.getElementById('lastRun').textContent = state.last_run_end
-      ? `Last: ${fmt.rel(state.last_run_end)}` : '';
+      ? `Last: ${fmt.rel(state.last_run_end)}` : 'Never run';
     document.getElementById('nextRun').textContent = (!isRunning && state.next_run)
       ? `Next: ${fmt.relFuture(state.next_run)}` : '';
 
     document.getElementById('triggerBtn').disabled = isRunning;
   }
 
+  function clearLog() {
+    logClearIndex = logLines.length;
+    document.getElementById('logBody').innerHTML = '';
+  }
+
   function renderLogs(lines) {
     if (!lines?.length) return;
-    const newLines = lines.slice(logLines.length);
-    if (!newLines.length) return;
+    const start    = Math.max(logLines.length, logClearIndex);
+    const newLines = lines.slice(start);
     logLines = lines;
+    if (!newLines.length) return;
 
     const body       = document.getElementById('logBody');
     const autoScroll = document.getElementById('autoScroll').checked;
@@ -608,9 +661,11 @@
   loadCookies();
   loadUsers();
   loadStatus();
+  loadQueue();
   setInterval(loadCookies, 30000);
   setInterval(loadUsers,   15000);
   setInterval(loadStatus,   5000);
+  setInterval(loadQueue,    3000);
 </script>
 </body>
 </html>

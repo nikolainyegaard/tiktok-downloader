@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import time
+import requests
 import yt_dlp
 from datetime import datetime
 from typing import Any
@@ -89,7 +90,57 @@ def download_video(*, video_id: str, username: str, tiktok_id: str,
         return None
 
     print(f"[{_ts()}] Saved {video_id} ({file_size:,} bytes) → {actual_path}")
+    if upload_date:
+        os.utime(actual_path, (upload_date, upload_date))
     return actual_path
+
+
+def _load_cookies() -> dict[str, str]:
+    """Parse cookies.txt and return a name→value dict for HTTP requests."""
+    result: dict[str, str] = {}
+    try:
+        with open(COOKIES_PATH, encoding="utf-8", errors="ignore") as f:
+            for line in f:
+                if line.startswith("#") or not line.strip():
+                    continue
+                parts = line.strip().split("\t")
+                if len(parts) == 7:
+                    result[parts[5]] = parts[6]
+    except FileNotFoundError:
+        pass
+    return result
+
+
+def download_photos(*, video_id: str, username: str,
+                    image_urls: list[str], upload_date: int) -> str | None:
+    """
+    Download each image from a TikTok photo post directly.
+    Files are saved as {video_id}_01.jpg, {video_id}_02.jpg, …
+    Returns the path of the first image on success, None if all fail.
+    """
+    author_folder = os.path.join(VIDEOS_DIR, f"@{username}")
+    os.makedirs(author_folder, exist_ok=True)
+
+    cookies    = _load_cookies()
+    first_path: str | None = None
+    total      = len(image_urls)
+
+    for i, url in enumerate(image_urls, 1):
+        fpath = os.path.join(author_folder, f"{video_id}_{i:02d}.jpg")
+        try:
+            resp = requests.get(url, cookies=cookies, timeout=30)
+            resp.raise_for_status()
+            with open(fpath, "wb") as f:
+                f.write(resp.content)
+            if upload_date:
+                os.utime(fpath, (upload_date, upload_date))
+            if first_path is None:
+                first_path = fpath
+            print(f"[{_ts()}] Photo {i}/{total} saved → {fpath}")
+        except Exception as e:
+            print(f"[{_ts()}] Failed to download photo {i}/{total} for {video_id}: {e}")
+
+    return first_path
 
 
 def _get_video_files(folder: str, video_id: str) -> list[str]:

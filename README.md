@@ -16,7 +16,7 @@ A background loop runs on a fixed interval (default: 30 minutes, recommended: 3 
    - Refreshes their profile info and detects username changes
    - Fetches their full public video list from TikTok
    - Compares it against the database
-   - Downloads any new videos via yt-dlp, embedding metadata into the file
+   - Downloads any new videos via yt-dlp, embedding metadata into the file; photo posts are downloaded as individual `.jpg` images
    - Marks any previously-seen videos that have disappeared as deleted
    - Marks any previously-deleted videos that have reappeared as restored
 
@@ -85,7 +85,7 @@ Open the web UI and click **Upload cookies.txt** in the Authentication section. 
 
 ### 4. Add accounts
 
-Type a TikTok username (with or without `@`) into the **Track a user** field and click **Add**. The system will look up the account's permanent ID and store it. Add as many accounts as you like.
+Type a TikTok username (with or without `@`) into the **Track a user** field and click **Add**. The username is queued immediately — the input clears so you can add the next one right away. Each queued lookup runs in the background; a pending indicator appears below the form while it resolves.
 
 ### 5. Wait or trigger a run
 
@@ -162,7 +162,9 @@ All configuration is via environment variables in `docker-compose.yml`.
 
 ./videos/
   @username/
-    1234567890.mp4  # Each video named by its TikTok video ID
+    1234567890.mp4      # Video post, named by TikTok video ID
+    1234567890_01.jpg   # Photo post — one file per image
+    1234567890_02.jpg
     ...
 ```
 
@@ -176,7 +178,9 @@ All configuration is via environment variables in `docker-compose.yml`.
 
 ### Metadata embedded in video files
 
-Each downloaded MP4 has the following tags written by ffmpeg:
+Each downloaded file has its **modification date set to the video's TikTok upload date**, so files sort by upload order in your file system.
+
+MP4 files also have the following tags written by ffmpeg:
 
 | Tag | Content |
 |---|---|

@@ -2,7 +2,7 @@ import os
 import sys
 import logging
 import threading
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from logging.handlers import TimedRotatingFileHandler
 
 import database as db
@@ -49,7 +49,7 @@ def _loop_thread():
     while True:
         run_loop()
 
-        next_run = datetime.now() + timedelta(minutes=LOOP_INTERVAL_MINUTES)
+        next_run = datetime.now(timezone.utc) + timedelta(minutes=LOOP_INTERVAL_MINUTES)
         set_next_run(next_run.isoformat())
         print(
             f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}]"

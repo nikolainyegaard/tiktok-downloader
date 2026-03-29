@@ -4,12 +4,80 @@ Flask web application — user management UI and API.
 
 import asyncio
 import os
+import queue as _queue_module
+import re
+import threading
 from flask import Flask, jsonify, request, render_template
 
 import database as db
 from config import get_ms_token, cookies_info, COOKIES_PATH, DATA_DIR
 from tiktok_api import get_user_info
 from loop import is_running, get_state_snapshot, trigger_event
+
+
+# ── Add-user queue ────────────────────────────────────────────────────────────
+
+_add_queue:   _queue_module.Queue = _queue_module.Queue()
+_pending_lock = threading.Lock()
+_pending: dict = {}  # username → {"status": "pending"|"error", "message": str}
+
+
+def _process_add(username: str) -> None:
+    ms_token = get_ms_token()
+
+    async def _lookup():
+        from TikTokApi import TikTokApi
+        async with TikTokApi() as api:
+            await api.create_sessions(
+                ms_tokens=[ms_token], num_sessions=1, sleep_after=3,
+                browser="webkit",
+            )
+            return await get_user_info(api, username)
+
+    try:
+        info = asyncio.run(_lookup())
+    except Exception as e:
+        with _pending_lock:
+            _pending[username] = {"status": "error", "message": f"TikTok API error: {e}"}
+        return
+
+    if not info.get("tiktok_id"):
+        with _pending_lock:
+            _pending[username] = {"status": "error", "message": "User not found"}
+        return
+
+    if db.get_user(info["tiktok_id"]):
+        with _pending_lock:
+            _pending[username] = {"status": "error", "message": "User is already being tracked"}
+        return
+
+    db.add_user(
+        tiktok_id=info["tiktok_id"],
+        username=info["username"],
+        display_name=info["display_name"],
+        bio=info["bio"],
+        follower_count=info["follower_count"],
+        following_count=info["following_count"],
+        video_count=info["video_count"],
+        join_date=info["join_date"],
+    )
+    with _pending_lock:
+        del _pending[username]  # success — user is now in DB, frontend sees it via /api/users
+
+
+def _add_worker() -> None:
+    while True:
+        username = _add_queue.get()
+        try:
+            _process_add(username)
+        except Exception as e:
+            with _pending_lock:
+                _pending[username] = {"status": "error", "message": str(e)}
+        finally:
+            _add_queue.task_done()
+
+
+threading.Thread(target=_add_worker, daemon=True, name="add-worker").start()
 
 
 def create_app() -> Flask:
@@ -69,49 +137,28 @@ def create_app() -> Flask:
     @app.route("/api/users", methods=["POST"])
     def add_user():
         body     = request.get_json(silent=True) or {}
-        username = body.get("username", "").strip().lstrip("@")
+        raw      = body.get("username", "").strip().lstrip("@")
+        username = re.sub(r'[^a-zA-Z0-9_.]', '', raw)
 
         if not username:
             return jsonify({"error": "username is required"}), 400
 
-        # Prevent duplicates (case-insensitive username check)
         existing = db.get_all_users()
         if any(u["username"].lower() == username.lower() for u in existing):
             return jsonify({"error": "User is already being tracked"}), 409
 
-        ms_token = get_ms_token()
+        with _pending_lock:
+            if _pending.get(username, {}).get("status") == "pending":
+                return jsonify({"error": "Already queued"}), 409
+            _pending[username] = {"status": "pending"}
 
-        async def _lookup():
-            from TikTokApi import TikTokApi
-            async with TikTokApi() as api:
-                await api.create_sessions(
-                    ms_tokens=[ms_token], num_sessions=1, sleep_after=3
-                )
-                return await get_user_info(api, username)
+        _add_queue.put(username)
+        return jsonify({"queued": True, "username": username}), 202
 
-        try:
-            info = asyncio.run(_lookup())
-        except Exception as e:
-            return jsonify({"error": f"TikTok API error: {e}"}), 502
-
-        if not info.get("tiktok_id"):
-            return jsonify({"error": "User not found"}), 404
-
-        # Second duplicate check: same tiktok_id (different username casing / redirect)
-        if db.get_user(info["tiktok_id"]):
-            return jsonify({"error": "User is already being tracked"}), 409
-
-        db.add_user(
-            tiktok_id=info["tiktok_id"],
-            username=info["username"],
-            display_name=info["display_name"],
-            bio=info["bio"],
-            follower_count=info["follower_count"],
-            following_count=info["following_count"],
-            video_count=info["video_count"],
-            join_date=info["join_date"],
-        )
-        return jsonify({"ok": True, "user": info}), 201
+    @app.route("/api/queue", methods=["GET"])
+    def get_queue():
+        with _pending_lock:
+            return jsonify(dict(_pending))
 
     @app.route("/api/users/<tiktok_id>", methods=["DELETE"])
     def remove_user(tiktok_id: str):
