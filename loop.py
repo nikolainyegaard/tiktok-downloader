@@ -109,84 +109,84 @@ async def _process_all_users(users: list[dict]):
             username     = user["username"]
             display_name = user.get("display_name") or username
 
+        try:
+            remote_videos = get_user_videos(username, COOKIES_PATH)
+            _log(f"  {len(remote_videos)} videos visible on TikTok")
+        except Exception as e:
+            _log(f"  Failed to fetch video list: {e}")
+            continue
+
+        remote_ids            = {v["video_id"] for v in remote_videos}
+        known_ids, active_ids = db.get_video_id_sets(tiktok_id)
+
+        new_ids       = remote_ids - known_ids
+        deleted_ids   = active_ids - remote_ids
+        undeleted_ids = (known_ids - active_ids) & remote_ids
+
+        if new_ids:
+            _log(f"  New: {len(new_ids)}")
+        if deleted_ids:
+            _log(f"  Deleted: {len(deleted_ids)}")
+        if undeleted_ids:
+            _log(f"  Undeleted: {len(undeleted_ids)}")
+        if not (new_ids or deleted_ids or undeleted_ids):
+            _log("  No changes.")
+
+        video_map = {v["video_id"]: v for v in remote_videos}
+        for vid_id in new_ids:
+            v = video_map[vid_id]
             try:
-                remote_videos = get_user_videos(username, COOKIES_PATH)
-                _log(f"  {len(remote_videos)} videos visible on TikTok")
+                details = get_video_details(vid_id, username, cookies)
             except Exception as e:
-                _log(f"  Failed to fetch video list: {e}")
-                continue
-
-            remote_ids            = {v["video_id"] for v in remote_videos}
-            known_ids, active_ids = db.get_video_id_sets(tiktok_id)
-
-            new_ids       = remote_ids - known_ids
-            deleted_ids   = active_ids - remote_ids
-            undeleted_ids = (known_ids - active_ids) & remote_ids
-
-            if new_ids:
-                _log(f"  New: {len(new_ids)}")
-            if deleted_ids:
-                _log(f"  Deleted: {len(deleted_ids)}")
-            if undeleted_ids:
-                _log(f"  Undeleted: {len(undeleted_ids)}")
-            if not (new_ids or deleted_ids or undeleted_ids):
-                _log("  No changes.")
-
-            video_map = {v["video_id"]: v for v in remote_videos}
-            for vid_id in new_ids:
-                v = video_map[vid_id]
-                try:
-                    details = get_video_details(vid_id, username, cookies)
-                except Exception as e:
-                    _log(f"  Could not fetch details for {vid_id}: {e}, assuming video type")
-                    details = {
-                        "type":        "video",
-                        "description": v["description"],
-                        "upload_date": v["upload_date"],
-                        "image_urls":  [],
-                    }
+                _log(f"  Could not fetch details for {vid_id}: {e}, assuming video type")
+                details = {
+                    "type":        "video",
+                    "description": v["description"],
+                    "upload_date": v["upload_date"],
+                    "image_urls":  [],
+                }
+            if details["type"] == "photo" and details.get("image_urls"):
+                _log(f"  Downloading photo post {vid_id} ({len(details['image_urls'])} images)...")
+                path = download_photos(
+                    video_id=vid_id,
+                    username=username,
+                    image_urls=details["image_urls"],
+                    upload_date=details["upload_date"],
+                )
+            else:
+                _log(f"  Downloading video {vid_id}...")
+                path = download_video(
+                    video_id=vid_id,
+                    username=username,
+                    tiktok_id=tiktok_id,
+                    display_name=display_name,
+                    description=details["description"],
+                    upload_date=details["upload_date"],
+                    download_date=int(time.time()),
+                )
+            if path:
                 db.add_video(
                     vid_id, tiktok_id, details["type"],
                     details["description"], details["upload_date"]
                 )
-                if details["type"] == "photo" and details.get("image_urls"):
-                    _log(f"  Downloading photo post {vid_id} ({len(details['image_urls'])} images)...")
-                    path = download_photos(
-                        video_id=vid_id,
-                        username=username,
-                        image_urls=details["image_urls"],
-                        upload_date=details["upload_date"],
-                    )
-                else:
-                    _log(f"  Downloading video {vid_id}...")
-                    path = download_video(
-                        video_id=vid_id,
-                        username=username,
-                        tiktok_id=tiktok_id,
-                        display_name=display_name,
-                        description=details["description"],
-                        upload_date=details["upload_date"],
-                        download_date=int(time.time()),
-                    )
-                if path:
-                    _log(f"  Saved {vid_id} → {path}")
-                    db.update_video_downloaded(vid_id, path)
-                else:
-                    _log(f"  Failed to download {vid_id}")
+                _log(f"  Saved {vid_id} → {path}")
+                db.update_video_downloaded(vid_id, path)
+            else:
+                _log(f"  Failed to download {vid_id}")
 
-            for vid_id in deleted_ids:
-                db.mark_video_deleted(vid_id)
-                new_path = prefix_video_files(vid_id, username)
-                if new_path:
-                    db.update_video_file_path(vid_id, new_path)
-                _log(f"  Marked deleted: {vid_id}")
+        for vid_id in deleted_ids:
+            db.mark_video_deleted(vid_id)
+            new_path = prefix_video_files(vid_id, username)
+            if new_path:
+                db.update_video_file_path(vid_id, new_path)
+            _log(f"  Marked deleted: {vid_id}")
 
-            for vid_id in undeleted_ids:
-                db.mark_video_undeleted(vid_id)
-                new_path = unprefix_video_files(vid_id, username)
-                if new_path:
-                    db.update_video_file_path(vid_id, new_path)
-                _log(f"  Marked undeleted: {vid_id}")
+        for vid_id in undeleted_ids:
+            db.mark_video_undeleted(vid_id)
+            new_path = unprefix_video_files(vid_id, username)
+            if new_path:
+                db.update_video_file_path(vid_id, new_path)
+            _log(f"  Marked undeleted: {vid_id}")
 
     with _state_lock:
         loop_state["current_user"] = None
