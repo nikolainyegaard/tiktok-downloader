@@ -340,7 +340,7 @@
         placeholder="@username"
         onkeydown="if(event.key==='Enter') addUser()"
         oninput="this.value=this.value.replace(/[^a-zA-Z0-9_.@]/g,'')"
-        autocomplete="off"
+        autocomplete="new-password"
         spellcheck="false"
       />
       <button class="btn-primary" id="addBtn" onclick="addUser()">Add</button>
