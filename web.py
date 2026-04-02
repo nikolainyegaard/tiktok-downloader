@@ -49,6 +49,18 @@ def _process_add(username: str) -> None:
         return
 
     if db.get_user(info["tiktok_id"]):
+        # User already exists by TikTok ID (may have changed username or been added
+        # before sec_uid was stored). Patch the record so the loop can find them.
+        db.update_user_info(
+            tiktok_id=info["tiktok_id"],
+            username=info["username"],
+            display_name=info["display_name"],
+            bio=info["bio"],
+            follower_count=info["follower_count"],
+            following_count=info["following_count"],
+            video_count=info["video_count"],
+            sec_uid=info.get("sec_uid"),
+        )
         with _pending_lock:
             _pending[username] = {"status": "error", "message": "User is already being tracked"}
         return

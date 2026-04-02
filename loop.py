@@ -76,7 +76,12 @@ async def _fetch_user_info(username: str, sec_uid: str | None = None) -> dict:
             sleep_after=3,
             executable_path=CHROME_EXECUTABLE,
         )
-        return await get_user_info(api, username=username, sec_uid=sec_uid)
+        if sec_uid:
+            try:
+                return await get_user_info(api, sec_uid=sec_uid)
+            except Exception:
+                pass  # sec_uid lookup failed; fall back to username
+        return await get_user_info(api, username=username)
 
 
 async def _process_all_users(users: list[dict]):
