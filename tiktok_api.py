@@ -36,8 +36,8 @@ async def get_user_info(api, username: str | None = None,
         "follower_count":  s.get("followerCount", 0),
         "following_count": s.get("followingCount", 0),
         "video_count":     s.get("videoCount", 0),
-        # 'secret' flag is set on private / banned accounts
-        "account_status":  "banned" if u.get("secret") else "active",
+        # 'secret' flag means the account is private (not necessarily banned)
+        "is_private":      bool(u.get("secret")),
     }
 
 

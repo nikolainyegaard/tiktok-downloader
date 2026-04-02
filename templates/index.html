@@ -261,6 +261,11 @@
     .account-status.banned  { background: rgba(224,82,82,.15);  color: var(--red); }
     .account-status.unknown { background: var(--surface2); color: var(--muted); }
 
+    .privacy-status { display: inline-block; font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 99px; }
+    .privacy-status.public             { background: rgba(76,175,125,.15); color: var(--green); }
+    .privacy-status.private-accessible { background: rgba(76,175,125,.15); color: var(--green); }
+    .privacy-status.private-blocked    { background: rgba(224,82,82,.15);  color: var(--red); }
+
     .user-bio { font-size: 12px; color: var(--text-dim); line-height: 1.4; max-height: 40px; overflow: hidden; text-overflow: ellipsis; }
     .user-checked { font-size: 11px; color: var(--muted); }
     .user-card-current { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
@@ -495,6 +500,15 @@
     grid.innerHTML = users.map(u => {
       const isCurrent = u.username === currentUser;
       const status    = u.account_status || 'unknown';
+      const privacyMap = {
+        'public':             ['public',             'Public'],
+        'private_accessible': ['private-accessible', 'Private'],
+        'private_blocked':    ['private-blocked',    'Private'],
+      };
+      const [privacyCls, privacyLabel] = privacyMap[u.privacy_status] || [];
+      const privacyBadge = privacyCls
+        ? `<span class="privacy-status ${privacyCls}">${privacyLabel}</span>`
+        : '';
       const checked   = u.last_checked
         ? `Last checked ${fmt.rel(new Date(u.last_checked * 1000).toISOString())}`
         : 'Never checked';
@@ -514,6 +528,7 @@
             </div>
             <div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px">
               <span class="account-status ${status}">${status}</span>
+              ${privacyBadge}
               <button class="btn-danger" onclick="removeUser('${esc(u.tiktok_id)}','@${esc(u.username)}')">Remove</button>
             </div>
           </div>
