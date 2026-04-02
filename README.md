@@ -16,8 +16,9 @@ A background loop runs on a fixed interval (default: 30 minutes, recommended: 3 
    - Fetches their full public video list via yt-dlp — no browser session needed
    - Compares it against the database
    - Downloads any new videos via yt-dlp, embedding metadata into the file; photo posts are downloaded as individual `.jpg` images
-   - Marks any previously-seen videos that have disappeared as deleted
-   - Marks any previously-deleted videos that have reappeared as restored
+   - Tracks videos that have disappeared — after 3 consecutive loop runs without the video appearing, it is marked as deleted and its file is prefixed with `del_`
+   - Tracks banned accounts similarly — confirmed after 3 consecutive checks
+   - Immediately marks any previously-deleted videos or banned accounts as restored/active if they reappear
 
 The first run for an account with many videos will take a while. Subsequent runs are fast.
 
@@ -88,7 +89,7 @@ Type a TikTok username (with or without `@`) into the **Track a user** field and
 
 ### 5. Wait or trigger a run
 
-The loop runs automatically on startup and then on the interval you configured. Click **Run Now** in the header to trigger an immediate run without waiting.
+The loop does not run automatically on startup — it waits for the first interval to elapse. Click **Run Now** in the header to trigger an immediate run without waiting.
 
 ---
 

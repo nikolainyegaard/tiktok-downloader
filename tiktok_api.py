@@ -1,12 +1,19 @@
 """TikTok data fetching."""
 
+from __future__ import annotations
+
 import json
 import re
 
 
-async def get_user_info(api, username: str) -> dict:
-    """Fetch user profile data. Returns a normalised dict."""
-    user = api.user(username=username)
+async def get_user_info(api, username: str | None = None, user_id: str | None = None) -> dict:
+    """Fetch user profile data. Returns a normalised dict.
+    Pass user_id when available — it works even after a username change.
+    """
+    if user_id:
+        user = api.user(user_id=user_id)
+    else:
+        user = api.user(username=username)
     data = await user.info()
     u = data.get("userInfo", {}).get("user", {})
     s = data.get("userInfo", {}).get("stats", {})
@@ -28,8 +35,9 @@ async def get_user_info(api, username: str) -> dict:
     }
 
 
-def get_user_videos(username: str, cookies_path: str | None = None) -> list[dict]:
+def get_user_videos(tiktok_id: str, cookies_path: str | None = None) -> list[dict]:
     """List all videos from a user's profile using yt-dlp flat extraction.
+    Uses the numeric TikTok ID so lookups survive username changes.
     Returns [{video_id, description, upload_date}].
     """
     import yt_dlp
@@ -42,7 +50,7 @@ def get_user_videos(username: str, cookies_path: str | None = None) -> list[dict
     if cookies_path:
         ydl_opts["cookiefile"] = cookies_path
 
-    url    = f"https://www.tiktok.com/@{username}"
+    url    = f"tiktokuser:{tiktok_id}"
     videos = []
 
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
