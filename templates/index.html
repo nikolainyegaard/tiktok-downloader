@@ -542,7 +542,7 @@
             ${u.video_undeleted ? `<span class="stat-item" style="color:var(--yellow)"><strong>${u.video_undeleted}</strong> restored</span>` : ''}
           </div>
 
-          <div style="display:flex;align-items:center;justify-content:space-between;">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-top:auto;">
             <div class="user-checked">${checked}</div>
             <button class="btn-danger" onclick="removeUser('${esc(u.tiktok_id)}','@${esc(u.username)}')">Remove</button>
           </div>
