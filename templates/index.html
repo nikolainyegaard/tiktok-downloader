@@ -509,6 +509,7 @@
       const privacyBadge = privacyCls
         ? `<span class="privacy-status ${privacyCls}">${privacyLabel}</span>`
         : '';
+      const statusLabel = status.charAt(0).toUpperCase() + status.slice(1);
       const checked   = u.last_checked
         ? `Last checked ${fmt.rel(new Date(u.last_checked * 1000).toISOString())}`
         : 'Never checked';
@@ -527,9 +528,8 @@
               <div class="user-id-line">${idLine}</div>
             </div>
             <div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px">
-              <span class="account-status ${status}">${status}</span>
+              <span class="account-status ${status}">${statusLabel}</span>
               ${privacyBadge}
-              <button class="btn-danger" onclick="removeUser('${esc(u.tiktok_id)}','@${esc(u.username)}')">Remove</button>
             </div>
           </div>
 
@@ -542,7 +542,10 @@
             ${u.video_undeleted ? `<span class="stat-item" style="color:var(--yellow)"><strong>${u.video_undeleted}</strong> restored</span>` : ''}
           </div>
 
-          <div class="user-checked">${checked}</div>
+          <div style="display:flex;align-items:center;justify-content:space-between;">
+            <div class="user-checked">${checked}</div>
+            <button class="btn-danger" onclick="removeUser('${esc(u.tiktok_id)}','@${esc(u.username)}')">Remove</button>
+          </div>
         </div>
       `;
     }).join('');
