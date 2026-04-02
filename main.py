@@ -47,8 +47,6 @@ sys.stderr = _Tee(sys.__stderr__, _transcript_handler)
 
 def _loop_thread():
     while True:
-        run_loop()
-
         next_run = datetime.now(timezone.utc) + timedelta(minutes=LOOP_INTERVAL_MINUTES)
         set_next_run(next_run.isoformat())
         print(
@@ -64,6 +62,8 @@ def _loop_thread():
                 f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}]"
                 " Manual trigger received, running loop now."
             )
+
+        run_loop()
 
 
 # Entry point

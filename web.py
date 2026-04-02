@@ -34,7 +34,7 @@ def _process_add(username: str) -> None:
                 sleep_after=3,
                 executable_path=CHROME_EXECUTABLE,
             )
-            return await get_user_info(api, username)
+            return await get_user_info(api, username=username)
 
     try:
         info = asyncio.run(_lookup())
