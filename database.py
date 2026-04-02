@@ -38,6 +38,7 @@ def init_db():
                 video_count         INTEGER DEFAULT 0,
                 join_date           INTEGER,
                 account_status      TEXT DEFAULT 'active',
+                privacy_status      TEXT DEFAULT 'public',
                 added_at            INTEGER NOT NULL,
                 last_checked        INTEGER,
                 enabled             INTEGER DEFAULT 1,
@@ -81,6 +82,7 @@ def _migrate_db(conn):
         "ALTER TABLE users  ADD COLUMN pending_ban_since  INTEGER",
         "ALTER TABLE videos ADD COLUMN pending_deletion_count INTEGER NOT NULL DEFAULT 0",
         "ALTER TABLE videos ADD COLUMN pending_deletion_since INTEGER",
+        "ALTER TABLE users  ADD COLUMN privacy_status TEXT DEFAULT 'public'",
     ]
     for sql in migrations:
         try:
@@ -246,6 +248,15 @@ def get_all_video_stats() -> dict:
             GROUP BY tiktok_id
         """).fetchall()
     return {r["tiktok_id"]: dict(r) for r in rows}
+
+
+def update_user_privacy_status(tiktok_id: str, status: str):
+    """status: 'public' | 'private_accessible' | 'private_blocked'"""
+    with get_db() as conn:
+        conn.execute(
+            "UPDATE users SET privacy_status = ? WHERE tiktok_id = ?",
+            (status, tiktok_id),
+        )
 
 
 def set_user_account_status(tiktok_id: str, status: str):

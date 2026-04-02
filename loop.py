@@ -92,6 +92,8 @@ async def _process_all_users(users: list[dict]):
 
         _log(f"Processing @{user['username']} (ID: {tiktok_id})")
 
+        is_private: bool | None = None
+
         try:
             info = await _fetch_user_info(user["username"], sec_uid=user.get("sec_uid"))
             db.update_user_info(
@@ -112,24 +114,7 @@ async def _process_all_users(users: list[dict]):
                 if rename_user_folder(old_username, username):
                     db.rename_user_video_paths(tiktok_id, old_username, username)
                     _log(f"  Folder renamed and DB paths updated")
-
-            # Account status: positive changes (banned → active) are immediate;
-            # negative changes (active → banned) require _CONFIRM_THRESHOLD loops.
-            new_status     = info["account_status"]
-            current_status = user.get("account_status", "active")
-            if new_status == "active":
-                if current_status != "active":
-                    db.set_user_account_status(tiktok_id, "active")
-                    _log(f"  Account status: {current_status} → active")
-                db.clear_user_pending_ban(tiktok_id)
-            elif current_status != "banned":
-                count = db.increment_user_pending_ban(tiktok_id)
-                if count >= _CONFIRM_THRESHOLD:
-                    db.set_user_account_status(tiktok_id, "banned")
-                    db.clear_user_pending_ban(tiktok_id)
-                    _log(f"  Account banned (confirmed {_CONFIRM_THRESHOLD}/{_CONFIRM_THRESHOLD})")
-                else:
-                    _log(f"  Account possibly banned ({count}/{_CONFIRM_THRESHOLD})")
+            is_private = info.get("is_private", False)
         except Exception as e:
             _log(f"  Failed to fetch profile info: {e}")
             username     = user["username"]
@@ -138,8 +123,15 @@ async def _process_all_users(users: list[dict]):
         try:
             remote_videos = get_user_videos(tiktok_id, COOKIES_PATH)
             _log(f"  {len(remote_videos)} videos visible on TikTok")
+            if is_private is True:
+                db.update_user_privacy_status(tiktok_id, "private_accessible")
+            elif is_private is False:
+                db.update_user_privacy_status(tiktok_id, "public")
+            # if is_private is None (profile fetch failed), leave privacy_status unchanged
         except Exception as e:
             _log(f"  Failed to fetch video list: {e}")
+            if "private" in str(e).lower():
+                db.update_user_privacy_status(tiktok_id, "private_blocked")
             continue
 
         remote_ids            = {v["video_id"] for v in remote_videos}
