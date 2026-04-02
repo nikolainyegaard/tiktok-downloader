@@ -133,6 +133,9 @@ async def _process_all_users(users: list[dict]):
             elif is_private is False:
                 db.update_user_privacy_status(tiktok_id, "public")
             # if is_private is None (profile fetch failed), leave privacy_status unchanged
+            if user.get("account_status") == "banned":
+                db.set_user_account_status(tiktok_id, "active")
+                _log("  Account status cleared (videos accessible)")
         except Exception as e:
             _log(f"  Failed to fetch video list: {e}")
             if "private" in str(e).lower():
