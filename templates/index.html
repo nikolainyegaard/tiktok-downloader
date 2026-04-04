@@ -422,7 +422,7 @@
     /* Shared column layout for header + rows */
     .vcols {
       display: grid;
-      grid-template-columns: 90px minmax(120px,1fr) 76px 70px 92px 92px 92px;
+      grid-template-columns: 90px minmax(120px,1fr) 76px 70px 92px 92px 92px 32px;
       gap: 10px;
       align-items: center;
     }
@@ -465,7 +465,10 @@
       border-radius: 4px;
       background: var(--surface2);
       display: block;
+      cursor: pointer;
+      transition: opacity .15s;
     }
+    .video-thumb:hover { opacity: .75; }
 
     .video-desc {
       font-size: 12px; color: var(--text); line-height: 1.4;
@@ -488,6 +491,56 @@
 
     .vlist-empty   { padding: 48px; text-align: center; color: var(--muted); }
     .vlist-loading { padding: 48px; text-align: center; color: var(--muted); font-style: italic; }
+
+    .play-btn {
+      background: none; border: none;
+      color: var(--accent); font-size: 15px;
+      cursor: pointer; padding: 3px 4px;
+      border-radius: 4px; opacity: .65;
+      transition: opacity .15s, background .15s;
+      display: flex; align-items: center; justify-content: center;
+      width: 26px; height: 26px;
+    }
+    .play-btn:hover { opacity: 1; background: rgba(79,142,247,.12); }
+
+    /* ── Media preview modals (image + video, layered over video-list modal) ─── */
+
+    .media-modal {
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,.88);
+      z-index: 300;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .media-modal-inner { position: relative; }
+
+    .media-modal-close {
+      position: absolute;
+      top: -34px; right: 0;
+      width: 28px; height: 28px;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 50%;
+      color: var(--text-dim); font-size: 16px;
+      cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      transition: background .15s, color .15s;
+    }
+    .media-modal-close:hover { background: var(--border); color: var(--text); }
+
+    .media-modal img {
+      max-width: 90vw; max-height: 85vh;
+      border-radius: 8px; display: block;
+    }
+
+    .media-modal video {
+      max-width: 92vw; max-height: 85vh;
+      border-radius: 8px; background: #000;
+      display: block; outline: none;
+    }
 
     /* ── Log panel ───────────────────────────────────────────────────────────── */
 
@@ -533,6 +586,8 @@
     <div class="header-meta">
       <span id="lastRun"></span>
       <span id="nextRun"></span>
+      <button class="btn-ghost" id="backfillBtn" onclick="triggerBackfill()" style="font-size:12px;padding:5px 10px;">Backfill Stats</button>
+      <span id="backfillStatus" style="font-size:12px;color:var(--muted)"></span>
       <button class="btn-primary" id="triggerBtn" onclick="triggerLoop()">Run Now</button>
     </div>
   </header>
@@ -607,6 +662,22 @@
   </section>
 
 </div>
+<!-- Image preview modal -->
+<div id="imgModal" class="media-modal" style="display:none" onclick="if(event.target===this)closeImgModal()">
+  <div class="media-modal-inner">
+    <button class="media-modal-close" onclick="closeImgModal()">✕</button>
+    <img id="imgModalImg" src="" alt="">
+  </div>
+</div>
+
+<!-- Video player modal -->
+<div id="vidModal" class="media-modal" style="display:none" onclick="if(event.target===this)closeVidModal()">
+  <div class="media-modal-inner">
+    <button class="media-modal-close" onclick="closeVidModal()">✕</button>
+    <video id="vidModalPlayer" controls autoplay></video>
+  </div>
+</div>
+
 <!-- User detail modal -->
 <div id="modalBackdrop" class="modal-backdrop" style="display:none" onclick="handleBackdropClick(event)">
   <div class="modal">
@@ -986,6 +1057,7 @@
     { field: 'upload_date',    label: 'Uploaded' },
     { field: 'download_date',  label: 'Saved' },
     { field: 'deleted_at',     label: 'Deleted' },
+    { field: null,             label: '' },
   ];
 
   function fmtCount(n) {
@@ -1036,11 +1108,45 @@
   }
 
   document.addEventListener('keydown', e => {
-    if (e.key === 'Escape' &&
-        document.getElementById('modalBackdrop').style.display !== 'none') {
+    if (e.key !== 'Escape') return;
+    if (document.getElementById('imgModal').style.display !== 'none') {
+      closeImgModal(); return;
+    }
+    if (document.getElementById('vidModal').style.display !== 'none') {
+      closeVidModal(); return;
+    }
+    if (document.getElementById('modalBackdrop').style.display !== 'none') {
       closeModal();
     }
   });
+
+  // ── Image preview modal ───────────────────────────────────────────────────
+
+  function openImgModal(videoId) {
+    document.getElementById('imgModalImg').src = `/api/videos/${encodeURIComponent(videoId)}/thumbnail`;
+    document.getElementById('imgModal').style.display = 'flex';
+  }
+
+  function closeImgModal() {
+    document.getElementById('imgModal').style.display = 'none';
+    document.getElementById('imgModalImg').src = '';
+  }
+
+  // ── Video player modal ────────────────────────────────────────────────────
+
+  function openVidModal(videoId) {
+    const vid = document.getElementById('vidModalPlayer');
+    vid.src = `/api/videos/${encodeURIComponent(videoId)}/file`;
+    document.getElementById('vidModal').style.display = 'flex';
+    vid.play().catch(() => {});
+  }
+
+  function closeVidModal() {
+    const vid = document.getElementById('vidModalPlayer');
+    vid.pause();
+    vid.src = '';
+    document.getElementById('vidModal').style.display = 'none';
+  }
 
   async function _loadModalVideos(tiktokId) {
     const { ok, data } = await apiJSON(`/api/users/${tiktokId}/videos`);
@@ -1183,7 +1289,8 @@
                         : v.status === 'undeleted' ? 'Restored' : 'Active';
       row.innerHTML = `
         <img class="video-thumb" src="/api/videos/${esc(v.video_id)}/thumbnail" alt=""
-             onerror="this.style.opacity='.15'">
+             onerror="this.style.opacity='.15'"
+             onclick="event.stopPropagation();openImgModal('${esc(v.video_id)}')">
         <div>${v.description
           ? `<div class="video-desc">${esc(v.description)}</div>`
           : `<div class="video-desc-empty">(no description)</div>`}</div>
@@ -1194,6 +1301,9 @@
         <div class="video-cell">${fmtDateShort(v.upload_date)}</div>
         <div class="video-cell">${fmtDateShort(v.download_date)}</div>
         <div class="video-cell">${fmtDateShort(v.deleted_at)}</div>
+        <div class="video-cell" style="padding:0">
+          ${v.type === 'video' ? `<button class="play-btn" onclick="event.stopPropagation();openVidModal('${esc(v.video_id)}')" title="Play video">▶</button>` : ''}
+        </div>
       `;
       list.appendChild(row);
     });
@@ -1211,6 +1321,45 @@
     }
   }
 
+  // ── Stats backfill ────────────────────────────────────────────────────────────
+
+  let _backfillPoll = null;
+
+  async function triggerBackfill() {
+    const btn = document.getElementById('backfillBtn');
+    btn.disabled = true;
+    const { ok, data } = await apiJSON('/api/backfill', { method: 'POST' });
+    if (!ok) {
+      alert(data.error || 'Could not start backfill');
+      btn.disabled = false;
+      return;
+    }
+    _startBackfillPoll();
+  }
+
+  function _startBackfillPoll() {
+    if (_backfillPoll) return;
+    _backfillPoll = setInterval(async () => {
+      const { ok, data } = await apiJSON('/api/backfill');
+      if (!ok) return;
+      const btn      = document.getElementById('backfillBtn');
+      const statusEl = document.getElementById('backfillStatus');
+      if (data.running) {
+        btn.disabled = true;
+        statusEl.textContent = `Backfilling… ${data.done}/${data.total}`;
+      } else {
+        clearInterval(_backfillPoll);
+        _backfillPoll = null;
+        btn.disabled = false;
+        if (data.total > 0) {
+          const ok2 = data.done - data.errors;
+          statusEl.textContent = `Done: ${ok2} updated, ${data.errors} failed`;
+          setTimeout(() => { statusEl.textContent = ''; }, 12000);
+        }
+      }
+    }, 2000);
+  }
+
   // ── Init ──────────────────────────────────────────────────────────────────────
 
   loadCookies();
@@ -1221,6 +1370,15 @@
   setInterval(loadUsers,   15000);
   setInterval(loadStatus,   5000);
   setInterval(loadQueue,    3000);
+
+  // Resume backfill poll if it was running before page load
+  (async () => {
+    const { ok, data } = await apiJSON('/api/backfill');
+    if (ok && data.running) {
+      document.getElementById('backfillBtn').disabled = true;
+      _startBackfillPoll();
+    }
+  })();
 </script>
 </body>
 </html>

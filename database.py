@@ -385,3 +385,29 @@ def get_all_username_history() -> dict:
     for row in rows:
         result.setdefault(row["tiktok_id"], []).append(row["old_username"])
     return result
+
+
+def get_videos_missing_stats() -> list[dict]:
+    """Return downloaded videos with no view_count, joined to get the owner's current username."""
+    with get_db() as conn:
+        return [dict(r) for r in conn.execute(
+            """SELECT v.video_id, v.tiktok_id, u.username
+               FROM videos v
+               JOIN users u ON u.tiktok_id = v.tiktok_id
+               WHERE v.view_count IS NULL AND v.file_path IS NOT NULL
+               ORDER BY v.download_date"""
+        ).fetchall()]
+
+
+def update_video_stats(video_id: str, view_count=None, like_count=None,
+                       comment_count=None, share_count=None, save_count=None):
+    with get_db() as conn:
+        conn.execute("""
+            UPDATE videos SET
+                view_count    = ?,
+                like_count    = ?,
+                comment_count = ?,
+                share_count   = ?,
+                save_count    = ?
+            WHERE video_id = ?
+        """, (view_count, like_count, comment_count, share_count, save_count, video_id))
