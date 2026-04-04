@@ -89,7 +89,9 @@ Type a TikTok username (with or without `@`) into the **Track a user** field and
 
 ### 5. Wait or trigger a run
 
-The loop does not run automatically on startup — it waits for the first interval to elapse. Click **Run Now** in the header to trigger an immediate run without waiting.
+The loop does not run automatically on startup — it waits for the first interval to elapse. Click **Run Now** in the header to trigger an immediate full run without waiting.
+
+To process a single user immediately, click the **Run** button on their card. Multiple users can be queued this way — they run in order, one at a time.
 
 ---
 
