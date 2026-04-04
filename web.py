@@ -12,7 +12,7 @@ from flask import Flask, jsonify, request, render_template
 import database as db
 from config import get_ms_token, cookies_info, COOKIES_PATH, DATA_DIR, CHROME_EXECUTABLE, APP_VERSION
 from tiktok_api import get_user_info
-from loop import is_running, get_state_snapshot, trigger_event
+from loop import is_running, get_state_snapshot, trigger_event, enqueue_user_run
 
 
 # Add-user queue
@@ -194,6 +194,14 @@ def create_app() -> Flask:
     @app.route("/api/users/<tiktok_id>/videos", methods=["GET"])
     def user_videos(tiktok_id: str):
         return jsonify(db.get_videos_for_user(tiktok_id))
+
+    @app.route("/api/users/<tiktok_id>/run", methods=["POST"])
+    def run_user(tiktok_id: str):
+        if not db.get_user(tiktok_id):
+            return jsonify({"error": "User not found"}), 404
+        if not enqueue_user_run(tiktok_id):
+            return jsonify({"error": "Already queued or running"}), 409
+        return jsonify({"ok": True})
 
     # Loop API
 

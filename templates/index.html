@@ -98,6 +98,9 @@
     .btn-danger { background: transparent; color: var(--red); border: 1px solid var(--red); padding: 5px 10px; font-size: 12px; }
     .btn-danger:hover:not(:disabled) { background: rgba(224,82,82,.12); }
 
+    .btn-run { background: transparent; color: var(--accent); border: 1px solid var(--accent); padding: 5px 10px; font-size: 12px; }
+    .btn-run:hover:not(:disabled) { background: rgba(79,142,247,.12); }
+
     .btn-ghost { background: var(--surface2); color: var(--text); }
     .btn-ghost:hover:not(:disabled) { background: var(--border); }
 
@@ -297,6 +300,7 @@
       word-break: break-all;
     }
     .log-body .log-sep  { color: var(--accent); }
+    .log-body .log-user { color: var(--accent); }
     .log-body .log-err  { color: var(--red); }
     .log-body .log-warn { color: var(--yellow); }
     .log-body .log-dl   { color: var(--green); }
@@ -421,6 +425,8 @@
   let logClearIndex = 0;
   let pending       = {};
   const dismissed   = new Set();
+  let runQueue      = [];   // tiktok_ids queued for manual run
+  let runCurrent    = null; // tiktok_id currently being run manually
 
   // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -544,7 +550,16 @@
 
           <div style="display:flex;align-items:center;justify-content:space-between;margin-top:auto;">
             <div class="user-checked">${checked}</div>
-            <button class="btn-danger" onclick="removeUser('${esc(u.tiktok_id)}','@${esc(u.username)}')">Remove</button>
+            <div style="display:flex;gap:6px;">
+              ${(() => {
+                const inRunQueue = runQueue.includes(u.tiktok_id);
+                const isRunCurrent = runCurrent === u.tiktok_id;
+                const label = isRunCurrent ? 'Running…' : inRunQueue ? 'Queued' : 'Run';
+                const disabled = (inRunQueue || isRunCurrent) ? 'disabled' : '';
+                return `<button class="btn-run" ${disabled} onclick="runUser('${esc(u.tiktok_id)}')">${label}</button>`;
+              })()}
+              <button class="btn-danger" onclick="removeUser('${esc(u.tiktok_id)}','@${esc(u.username)}')">Remove</button>
+            </div>
           </div>
         </div>
       `;
@@ -635,6 +650,16 @@
     renderPending();
   }
 
+  async function runUser(tiktokId) {
+    const { ok, data } = await apiJSON(`/api/users/${tiktokId}/run`, { method: 'POST' });
+    if (!ok) {
+      alert(data.error || 'Could not queue run');
+      return;
+    }
+    runQueue = [...runQueue, tiktokId];
+    renderUsers();
+  }
+
   async function removeUser(tiktokId, label) {
     if (!confirm(`Stop tracking ${label}?\n(Downloaded files will not be deleted.)`)) return;
     await apiJSON(`/api/users/${tiktokId}`, { method: 'DELETE' });
@@ -651,6 +676,8 @@
   function renderStatus(state) {
     isRunning   = state.running;
     currentUser = state.current_user;
+    runQueue    = state.run_queue    || [];
+    runCurrent  = state.run_current  || null;
 
     const badge = document.getElementById('statusBadge');
     const text  = document.getElementById('statusText');
@@ -685,6 +712,7 @@
     newLines.forEach(line => {
       const span = document.createElement('span');
       if      (line.includes('=== Loop'))            span.className = 'log-sep';
+      else if (/\] Processing @/.test(line))          span.className = 'log-user';
       else if (/error|failed|unexpected/i.test(line)) span.className = 'log-err';
       else if (/warn|deleted|corrupt/i.test(line))    span.className = 'log-warn';
       else if (/download|saved/i.test(line))          span.className = 'log-dl';

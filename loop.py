@@ -3,6 +3,7 @@ Main download loop and shared state used by both the loop thread and the web ser
 """
 
 import asyncio
+import queue as _queue_module
 import random
 import threading
 import time
@@ -28,6 +29,11 @@ _state_lock        = threading.Lock()
 trigger_event      = threading.Event()
 _CONFIRM_THRESHOLD = 3  # loops a negative change must persist before it's made official
 
+# Single-user run queue (for manual "Run" button)
+_run_queue:      _queue_module.Queue = _queue_module.Queue()
+_run_state_lock  = threading.Lock()
+_run_state: dict = {"current": None, "queue": []}  # tiktok_ids
+
 
 # Public accessors
 
@@ -42,11 +48,24 @@ def set_next_run(iso: str) -> None:
 
 
 def get_state_snapshot() -> dict:
-    """Return a serialisable copy of loop_state."""
+    """Return a serialisable copy of loop_state plus run-queue state."""
     with _state_lock:
         state = {k: v for k, v in loop_state.items() if k != "logs"}
         state["logs"] = list(loop_state["logs"])
+    with _run_state_lock:
+        state["run_current"] = _run_state["current"]
+        state["run_queue"]   = list(_run_state["queue"])
     return state
+
+
+def enqueue_user_run(tiktok_id: str) -> bool:
+    """Queue a single-user manual run. Returns False if already queued/running."""
+    with _run_state_lock:
+        if tiktok_id in _run_state["queue"] or _run_state["current"] == tiktok_id:
+            return False
+        _run_state["queue"].append(tiktok_id)
+    _run_queue.put(tiktok_id)
+    return True
 
 
 # Logging
@@ -84,17 +103,13 @@ async def _fetch_user_info(username: str, sec_uid: str | None = None) -> dict:
         return await get_user_info(api, username=username)
 
 
-async def _process_all_users(users: list[dict]):
-    cookies = get_cookies_flat()
+async def _process_single_user(user: dict, cookies: dict):
+    tiktok_id = user["tiktok_id"]
 
-    for idx, user in enumerate(users):
-        if idx > 0:
-            await asyncio.sleep(random.uniform(2, 5))
-        tiktok_id = user["tiktok_id"]
+    with _state_lock:
+        loop_state["current_user"] = user["username"]
 
-        with _state_lock:
-            loop_state["current_user"] = user["username"]
-
+    try:
         _log(f"Processing @{user['username']} (ID: {tiktok_id})")
 
         is_private: bool | None = None
@@ -140,7 +155,7 @@ async def _process_all_users(users: list[dict]):
             _log(f"  Failed to fetch video list: {e}")
             if "private" in str(e).lower():
                 db.update_user_privacy_status(tiktok_id, "private_blocked")
-            continue
+            return
 
         remote_ids            = {v["video_id"] for v in remote_videos}
         known_ids, active_ids = db.get_video_id_sets(tiktok_id)
@@ -225,8 +240,43 @@ async def _process_all_users(users: list[dict]):
                 db.update_video_file_path(vid_id, new_path)
             _log(f"  Marked undeleted: {vid_id}")
 
-    with _state_lock:
-        loop_state["current_user"] = None
+    finally:
+        with _state_lock:
+            loop_state["current_user"] = None
+
+
+async def _process_all_users(users: list[dict]):
+    cookies = get_cookies_flat()
+
+    for idx, user in enumerate(users):
+        if idx > 0:
+            await asyncio.sleep(random.uniform(2, 5))
+        await _process_single_user(user, cookies)
+
+
+def _run_worker():
+    while True:
+        tiktok_id = _run_queue.get()
+        with _run_state_lock:
+            if tiktok_id in _run_state["queue"]:
+                _run_state["queue"].remove(tiktok_id)
+            _run_state["current"] = tiktok_id
+        try:
+            user = db.get_user(tiktok_id)
+            if user:
+                cookies = get_cookies_flat()
+                asyncio.run(_process_single_user(user, cookies))
+            else:
+                _log(f"Manual run: user {tiktok_id} not found in DB")
+        except Exception as e:
+            _log(f"Manual run error for {tiktok_id}: {e}")
+        finally:
+            with _run_state_lock:
+                _run_state["current"] = None
+            _run_queue.task_done()
+
+
+threading.Thread(target=_run_worker, daemon=True, name="run-worker").start()
 
 
 # Public entry point
