@@ -7,10 +7,11 @@ import os
 import queue as _queue_module
 import re
 import threading
+import time
 from flask import Flask, jsonify, request, render_template, send_file
 
 import database as db
-from config import get_ms_token, get_cookies_flat, cookies_info, COOKIES_PATH, DATA_DIR, VIDEOS_DIR, CHROME_EXECUTABLE, APP_VERSION
+from config import get_ms_token, get_cookies_flat, cookies_info, COOKIES_PATH, COOKIES_TIMESTAMP_PATH, DATA_DIR, VIDEOS_DIR, CHROME_EXECUTABLE, APP_VERSION
 from tiktok_api import get_user_info, get_video_details
 from loop import is_running, get_state_snapshot, trigger_event, enqueue_user_run
 from thumbnailer import thumb_path_for, avatar_path
@@ -160,12 +161,16 @@ def create_app() -> Flask:
         if os.path.exists(COOKIES_PATH):
             os.remove(COOKIES_PATH)
         f.save(COOKIES_PATH)
+        with open(COOKIES_TIMESTAMP_PATH, "w", encoding="utf-8") as ts_f:
+            ts_f.write(str(int(time.time())))
         return jsonify({"ok": True, **cookies_info()})
 
     @app.route("/api/cookies", methods=["DELETE"])
     def delete_cookies():
         if os.path.exists(COOKIES_PATH):
             os.remove(COOKIES_PATH)
+        if os.path.exists(COOKIES_TIMESTAMP_PATH):
+            os.remove(COOKIES_TIMESTAMP_PATH)
         return jsonify({"ok": True})
 
     # User API
