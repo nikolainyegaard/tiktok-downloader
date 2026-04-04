@@ -13,7 +13,7 @@ from datetime import datetime, timezone
 import database as db
 from config import get_ms_token, get_cookies_flat, COOKIES_PATH, CHROME_EXECUTABLE
 from tiktok_api import get_user_info, get_user_videos, get_video_details
-from downloader import download_video, download_photos, prefix_video_files, unprefix_video_files, rename_user_folder
+from downloader import download_video, download_photos, rename_user_folder
 from thumbnailer import backfill_thumbnails, cache_avatar
 
 # Shared state
@@ -244,18 +244,12 @@ async def _process_single_user(user: dict, cookies: dict):
             count = db.increment_video_pending_deletion(vid_id)
             if count >= _CONFIRM_THRESHOLD:
                 db.mark_video_deleted(vid_id)
-                new_path = prefix_video_files(vid_id, username)
-                if new_path:
-                    db.update_video_file_path(vid_id, new_path)
                 _log(f"  Marked deleted (confirmed {_CONFIRM_THRESHOLD}/{_CONFIRM_THRESHOLD}): {vid_id}")
             else:
                 _log(f"  Possibly deleted ({count}/{_CONFIRM_THRESHOLD}): {vid_id}")
 
         for vid_id in undeleted_ids:
             db.mark_video_undeleted(vid_id)
-            new_path = unprefix_video_files(vid_id, username)
-            if new_path:
-                db.update_video_file_path(vid_id, new_path)
             _log(f"  Marked undeleted: {vid_id}")
 
     finally:

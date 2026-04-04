@@ -239,14 +239,6 @@ def update_video_downloaded(video_id, file_path, ytdlp_data=None):
         """, (int(time.time()), file_path, ytdlp_data, video_id))
 
 
-def update_video_file_path(video_id, file_path):
-    with get_db() as conn:
-        conn.execute(
-            "UPDATE videos SET file_path = ? WHERE video_id = ?",
-            (file_path, video_id),
-        )
-
-
 def mark_video_deleted(video_id):
     with get_db() as conn:
         conn.execute("""
@@ -469,6 +461,34 @@ def get_all_user_ids() -> set:
         return {row[0] for row in conn.execute("SELECT tiktok_id FROM users").fetchall()}
 
 
+def get_aggregate_stats() -> dict:
+    """Return aggregate statistics across all tracked users and downloaded videos."""
+    with get_db() as conn:
+        urow = conn.execute("SELECT COUNT(*) FROM users").fetchone()
+        vrow = conn.execute("""
+            SELECT
+                SUM(CASE WHEN type = 'video'   THEN 1 ELSE 0 END) AS video_count,
+                SUM(CASE WHEN type = 'photo'   THEN 1 ELSE 0 END) AS photo_count,
+                SUM(CASE WHEN status != 'deleted' THEN 1 ELSE 0 END) AS saved_count,
+                SUM(CASE WHEN status =  'deleted' THEN 1 ELSE 0 END) AS deleted_count,
+                COALESCE(SUM(view_count), 0)                       AS total_views,
+                COALESCE(SUM(like_count), 0)                       AS total_likes,
+                MAX(download_date)                                 AS latest_download
+            FROM videos
+            WHERE file_path IS NOT NULL
+        """).fetchone()
+    return {
+        "user_count":      urow[0],
+        "video_count":     vrow["video_count"]   or 0,
+        "photo_count":     vrow["photo_count"]   or 0,
+        "saved_count":     vrow["saved_count"]   or 0,
+        "deleted_count":   vrow["deleted_count"] or 0,
+        "total_views":     vrow["total_views"]   or 0,
+        "total_likes":     vrow["total_likes"]   or 0,
+        "latest_download": vrow["latest_download"],
+    }
+
+
 def delete_orphaned_records() -> int:
     """Delete video and username_history rows for users no longer in the users table.
     Does NOT touch files on disk. Returns the number of rows deleted."""
@@ -490,3 +510,49 @@ def vacuum() -> None:
         conn.execute("VACUUM")
     finally:
         conn.close()
+
+
+def migrate_del_prefix() -> int:
+    """One-time migration: remove the del_ filename prefix from any video files still
+    carrying it on disk, and correct the matching file_path values in the database.
+
+    Safe to run multiple times — videos without a del_-prefixed file_path are skipped.
+    Returns the number of video records updated.
+    """
+    with get_db() as conn:
+        rows = conn.execute(
+            "SELECT video_id, file_path FROM videos WHERE file_path IS NOT NULL"
+        ).fetchall()
+
+    updates: list[tuple] = []
+    for row in rows:
+        video_id, file_path = row[0], row[1]
+        folder   = os.path.dirname(file_path)
+        basename = os.path.basename(file_path)
+
+        if not basename.startswith("del_"):
+            continue
+
+        # Rename every del_{video_id}* file in the folder (covers multi-image photo posts)
+        if os.path.isdir(folder):
+            try:
+                for fname in sorted(os.listdir(folder)):
+                    if not fname.startswith(f"del_{video_id}"):
+                        continue
+                    src = os.path.join(folder, fname)
+                    dst = os.path.join(folder, fname[4:])  # strip "del_"
+                    if os.path.exists(src) and not os.path.exists(dst):
+                        os.rename(src, dst)
+            except OSError:
+                pass
+
+        new_path = os.path.join(folder, basename[4:])  # strip "del_" from stored path
+        updates.append((new_path, video_id))
+
+    if updates:
+        with get_db() as conn:
+            conn.executemany(
+                "UPDATE videos SET file_path = ? WHERE video_id = ?", updates
+            )
+
+    return len(updates)
