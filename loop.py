@@ -14,7 +14,6 @@ import database as db
 from config import get_ms_token, get_cookies_flat, COOKIES_PATH, CHROME_EXECUTABLE
 from tiktok_api import get_user_info, get_user_videos, get_video_details
 from downloader import download_video, download_photos, prefix_video_files, unprefix_video_files, rename_user_folder
-from thumbnailer import backfill_thumbnails, cache_avatar
 
 # Shared state
 
@@ -126,9 +125,6 @@ async def _process_single_user(user: dict, cookies: dict):
                 info["following_count"],
                 info["video_count"],
                 sec_uid=info.get("sec_uid"),
-                verified=int(info.get("verified", False)),
-                avatar_url=info.get("avatar_url"),
-                raw_user_data=info.get("_raw_user_data"),
             )
             username     = info["username"]
             display_name = info["display_name"] or username
@@ -139,8 +135,6 @@ async def _process_single_user(user: dict, cookies: dict):
                     db.rename_user_video_paths(tiktok_id, old_username, username)
                     _log(f"  Folder renamed and DB paths updated")
             is_private = info.get("is_private", False)
-            if info.get("avatar_url"):
-                cache_avatar(tiktok_id, info["avatar_url"])
         except Exception as e:
             _log(f"  Failed to fetch profile info: {e}")
             username     = user["username"]
@@ -207,10 +201,9 @@ async def _process_single_user(user: dict, cookies: dict):
                     image_urls=details["image_urls"],
                     upload_date=details["upload_date"],
                 )
-                dl_result = {"file_path": path, "ytdlp_data": None} if path else None
             else:
                 _log(f"  Downloading video {vid_id}...")
-                dl_result = download_video(
+                path = download_video(
                     video_id=vid_id,
                     username=username,
                     tiktok_id=tiktok_id,
@@ -219,24 +212,13 @@ async def _process_single_user(user: dict, cookies: dict):
                     upload_date=details["upload_date"],
                     download_date=int(time.time()),
                 )
-            if dl_result:
+            if path:
                 db.add_video(
                     vid_id, tiktok_id, details["type"],
-                    details["description"], details["upload_date"],
-                    view_count=details.get("view_count"),
-                    like_count=details.get("like_count"),
-                    comment_count=details.get("comment_count"),
-                    share_count=details.get("share_count"),
-                    save_count=details.get("save_count"),
-                    duration=details.get("duration"),
-                    width=details.get("width"),
-                    height=details.get("height"),
-                    music_title=details.get("music_title"),
-                    music_artist=details.get("music_artist"),
-                    raw_video_data=details.get("_raw_video_data"),
+                    details["description"], details["upload_date"]
                 )
-                _log(f"  Saved {vid_id} → {dl_result['file_path']}")
-                db.update_video_downloaded(vid_id, dl_result["file_path"], dl_result.get("ytdlp_data"))
+                _log(f"  Saved {vid_id} → {path}")
+                db.update_video_downloaded(vid_id, path)
             else:
                 _log(f"  Failed to download {vid_id}")
 
@@ -295,7 +277,6 @@ def _run_worker():
 
 
 threading.Thread(target=_run_worker, daemon=True, name="run-worker").start()
-threading.Thread(target=backfill_thumbnails, daemon=True, name="thumb-backfill").start()
 
 
 # Public entry point
