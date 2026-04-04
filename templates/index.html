@@ -446,8 +446,8 @@
     .col-hdr.sort-asc::after  { content: ' ↑'; }
     .col-hdr.sort-desc { color: var(--accent); }
     .col-hdr.sort-desc::after { content: ' ↓'; }
-    /* Right-align all data columns except thumb+desc */
-    .col-hdr:nth-child(n+3) { text-align: right; }
+    /* Centre all data columns except thumb+desc */
+    .col-hdr:nth-child(n+3) { text-align: center; }
 
     .modal-video-list { flex: 1; overflow-y: auto; }
 
@@ -475,7 +475,7 @@
     }
     .video-desc-empty { font-size: 12px; color: var(--muted); font-style: italic; }
 
-    .video-cell { font-size: 12px; color: var(--text-dim); text-align: right; white-space: nowrap; }
+    .video-cell { font-size: 12px; color: var(--text-dim); text-align: center; white-space: nowrap; }
 
     .vstatus {
       display: inline-flex; align-items: center;
@@ -755,7 +755,7 @@
       const runDisabled  = (inRunQueue || isRunCurrent) ? 'disabled' : '';
 
       return `
-        <div class="user-card${isCurrent ? ' user-card-current' : ''}" onclick="openUserModal('${esc(u.tiktok_id)}')" role="button" tabindex="0">
+        <div class="user-card${isCurrent ? ' user-card-current' : ''}" onclick="if(!event.target.closest('button'))openUserModal('${esc(u.tiktok_id)}')" role="button" tabindex="0">
           <div class="user-card-top">
             <img class="user-avatar" src="/api/users/${esc(u.tiktok_id)}/avatar" alt="" onerror="this.style.display='none'">
             <div class="user-identity">
@@ -1187,7 +1187,7 @@
         <div>${v.description
           ? `<div class="video-desc">${esc(v.description)}</div>`
           : `<div class="video-desc-empty">(no description)</div>`}</div>
-        <div class="video-cell" style="text-align:center">
+        <div class="video-cell">
           <span class="vstatus ${v.status}">${statusLabel}</span>
         </div>
         <div class="video-cell">${fmtCount(v.view_count)}</div>
