@@ -9,27 +9,8 @@ from typing import Any
 from yt_dlp.utils import DownloadError
 
 from config import VIDEOS_DIR, COOKIES_PATH
-from thumbnailer import generate_thumbnail
 
 MIN_VALID_SIZE_BYTES = 10_000
-
-_YTDLP_STRIP_KEYS = frozenset({
-    "formats", "thumbnails", "thumbnail", "url", "http_headers",
-    "_format_sort_fields", "requested_formats", "requested_downloads",
-    "_filename", "_type", "webpage_url_basename", "webpage_url_domain",
-    "protocol", "__files_to_move", "__postprocessors",
-})
-
-def _clean_ytdlp_info(info: dict | None) -> str | None:
-    """Return a JSON string of the yt-dlp info dict with large/expiring fields removed."""
-    if not info:
-        return None
-    import json
-    cleaned = {k: v for k, v in info.items() if k not in _YTDLP_STRIP_KEYS}
-    try:
-        return json.dumps(cleaned, default=str)
-    except Exception:
-        return None
 
 
 def _ts():
@@ -38,10 +19,10 @@ def _ts():
 
 def download_video(*, video_id: str, username: str, tiktok_id: str,
                    display_name: str, description: str,
-                   upload_date: int, download_date: int) -> dict | None:
+                   upload_date: int, download_date: int) -> str | None:
     """
     Download a TikTok video using yt-dlp and embed metadata into the file.
-    Returns {'file_path': ..., 'ytdlp_data': ...} on success, None on failure.
+    Returns the final file path on success, None on failure.
     """
     author_folder = os.path.join(VIDEOS_DIR, f"@{username}")
     os.makedirs(author_folder, exist_ok=True)
@@ -87,7 +68,7 @@ def download_video(*, video_id: str, username: str, tiktok_id: str,
     print(f"[{_ts()}] Downloading {video_id} from @{username}...")
     try:
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:  # type: ignore[arg-type]
-            ydl_info = ydl.extract_info(video_url, download=True)
+            ydl.download([video_url])
     except DownloadError as e:
         print(f"[{_ts()}] yt-dlp error for {video_id}: {e}")
         _remove_corrupt(author_folder, video_id)
@@ -111,9 +92,7 @@ def download_video(*, video_id: str, username: str, tiktok_id: str,
     print(f"[{_ts()}] Saved {video_id} ({file_size:,} bytes) → {actual_path}")
     if upload_date:
         os.utime(actual_path, (upload_date, upload_date))
-    generate_thumbnail(video_id, actual_path)
-    ytdlp_data = _clean_ytdlp_info(ydl_info)
-    return {"file_path": actual_path, "ytdlp_data": ytdlp_data}
+    return actual_path
 
 
 def _load_cookies() -> dict[str, str]:
