@@ -212,8 +212,17 @@ def _run_cleanup() -> None:
         # 4. Vacuum
         with _cleanup_lock:
             _cleanup_state["current"] = "Vacuuming database…"
+        size_before = os.path.getsize(db.DB_PATH) if os.path.exists(db.DB_PATH) else 0
         db.vacuum()
-        steps.append("Database vacuumed")
+        size_after  = os.path.getsize(db.DB_PATH) if os.path.exists(db.DB_PATH) else 0
+
+        def _fmt_mb(b: int) -> str:
+            return f"{b / 1_048_576:.1f} MB"
+
+        if size_before != size_after:
+            steps.append(f"Database vacuumed ({_fmt_mb(size_before)} → {_fmt_mb(size_after)})")
+        else:
+            steps.append("Database vacuumed (no size change)")
         with _cleanup_lock:
             _cleanup_state["steps"] = list(steps)
 
@@ -367,6 +376,10 @@ def create_app() -> Flask:
                 return jsonify({"error": "Already running"}), 409
         threading.Thread(target=_run_backfill, daemon=True, name="stats-backfill").start()
         return jsonify({"ok": True})
+
+    @app.route("/api/stats", methods=["GET"])
+    def get_aggregate_stats():
+        return jsonify(db.get_aggregate_stats())
 
     @app.route("/api/db/cleanup", methods=["GET"])
     def get_cleanup_status():

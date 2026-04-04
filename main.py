@@ -72,6 +72,10 @@ if __name__ == "__main__":
     print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Initialising database...")
     db.init_db()
 
+    n = db.migrate_del_prefix()
+    if n:
+        print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Migration: renamed {n} del_-prefixed video file(s) and updated DB paths.")
+
     app = create_app()
 
     print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Starting loop thread...")
