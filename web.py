@@ -10,8 +10,8 @@ import threading
 from flask import Flask, jsonify, request, render_template, send_file
 
 import database as db
-from config import get_ms_token, cookies_info, COOKIES_PATH, DATA_DIR, CHROME_EXECUTABLE, APP_VERSION
-from tiktok_api import get_user_info
+from config import get_ms_token, get_cookies_flat, cookies_info, COOKIES_PATH, DATA_DIR, VIDEOS_DIR, CHROME_EXECUTABLE, APP_VERSION
+from tiktok_api import get_user_info, get_video_details
 from loop import is_running, get_state_snapshot, trigger_event, enqueue_user_run
 from thumbnailer import thumb_path_for, avatar_path
 
@@ -94,6 +94,43 @@ def _add_worker() -> None:
 
 
 threading.Thread(target=_add_worker, daemon=True, name="add-worker").start()
+
+
+# Stats backfill
+
+_backfill_lock  = threading.Lock()
+_backfill_state: dict = {"running": False, "done": 0, "total": 0, "errors": 0}
+
+
+def _run_backfill() -> None:
+    import time as _time
+
+    videos  = db.get_videos_missing_stats()
+    cookies = get_cookies_flat()
+
+    with _backfill_lock:
+        _backfill_state.update({"running": True, "done": 0, "total": len(videos), "errors": 0})
+
+    for v in videos:
+        try:
+            details = get_video_details(v["video_id"], v["username"], cookies)
+            db.update_video_stats(
+                v["video_id"],
+                view_count=details.get("view_count"),
+                like_count=details.get("like_count"),
+                comment_count=details.get("comment_count"),
+                share_count=details.get("share_count"),
+                save_count=details.get("save_count"),
+            )
+        except Exception:
+            with _backfill_lock:
+                _backfill_state["errors"] += 1
+        with _backfill_lock:
+            _backfill_state["done"] += 1
+        _time.sleep(1.5)
+
+    with _backfill_lock:
+        _backfill_state["running"] = False
 
 
 def create_app() -> Flask:
@@ -212,6 +249,29 @@ def create_app() -> Flask:
         if not os.path.exists(path):
             return ("", 404)
         return send_file(path, mimetype="image/jpeg")
+
+    @app.route("/api/videos/<video_id>/file", methods=["GET"])
+    def video_file(video_id: str):
+        video = db.get_video(video_id)
+        if not video or not video.get("file_path"):
+            return ("", 404)
+        path = video["file_path"]
+        if not os.path.exists(path):
+            return ("", 404)
+        return send_file(path, conditional=True)
+
+    @app.route("/api/backfill", methods=["GET"])
+    def get_backfill_status():
+        with _backfill_lock:
+            return jsonify(dict(_backfill_state))
+
+    @app.route("/api/backfill", methods=["POST"])
+    def start_backfill():
+        with _backfill_lock:
+            if _backfill_state["running"]:
+                return jsonify({"error": "Already running"}), 409
+        threading.Thread(target=_run_backfill, daemon=True, name="stats-backfill").start()
+        return jsonify({"ok": True})
 
     @app.route("/api/users/<tiktok_id>/run", methods=["POST"])
     def run_user(tiktok_id: str):

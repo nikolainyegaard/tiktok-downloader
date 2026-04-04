@@ -93,7 +93,12 @@ The loop does not run automatically on startup — it waits for the first interv
 
 To process a single user immediately, click the **Run** button on their card. Multiple users can be queued this way — they run in order, one at a time.
 
-Click anywhere on a user card (other than the Run/Remove buttons) to open a detail view showing their full profile info and a complete, sortable, filterable list of all their downloaded videos with thumbnails.
+Click anywhere on a user card (other than the Run/Remove buttons) to open a detail view showing their full profile info and a complete, sortable, filterable list of all their downloaded videos with thumbnails. From the video list:
+
+- **Click a thumbnail** to preview the image full-size in an overlay.
+- **Click the ▶ button** (video posts only) to play the video directly in the browser.
+
+If you have videos downloaded before v1.5.0, their view/like/comment counts will be missing. Click **Backfill Stats** in the page header to fetch the missing stats from TikTok without re-downloading any files. Progress is shown inline; the operation runs in the background and does not interrupt the download loop.
 
 ---
 
@@ -202,7 +207,7 @@ On first startup, a background thread scans all existing video files and generat
 
 **Username history:** Every username change is recorded with a timestamp, so you always know what an account used to be called.
 
-**Videos:** Video ID, type (video or photo carousel), description, upload date, download date, file path, status (`up` / `deleted` / `undeleted`), engagement stats (views, likes, comments, shares, saves), dimensions (width, height, duration), music info (title and artist), and the full raw TikTok page data + yt-dlp metadata as JSON blobs. Stats are captured at download time from the TikTok page — existing videos added before v1.5.0 will have NULL for these fields.
+**Videos:** Video ID, type (video or photo carousel), description, upload date, download date, file path, status (`up` / `deleted` / `undeleted`), engagement stats (views, likes, comments, shares, saves), dimensions (width, height, duration), music info (title and artist), and the full raw TikTok page data + yt-dlp metadata as JSON blobs. Stats are captured at download time from the TikTok page — use **Backfill Stats** in the UI to populate these for videos downloaded before v1.5.0.
 
 ### Metadata embedded in video files
 
