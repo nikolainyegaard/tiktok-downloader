@@ -503,6 +503,33 @@
     }
     .play-btn:hover { opacity: 1; background: rgba(79,142,247,.12); }
 
+    /* ── User sort control ──────────────────────────────────────────────────── */
+
+    .sort-select {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      color: var(--text);
+      font-size: 12px;
+      padding: 4px 8px;
+      cursor: pointer;
+      outline: none;
+    }
+    .sort-select:focus { border-color: var(--accent); }
+
+    .sort-dir-btn {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      color: var(--text-dim);
+      font-size: 12px; font-weight: 600;
+      padding: 4px 10px;
+      cursor: pointer;
+      white-space: nowrap;
+      transition: background .15s, color .15s;
+    }
+    .sort-dir-btn:hover { background: var(--border); color: var(--text); }
+
     /* ── Media preview modals (image + video, layered over video-list modal) ─── */
 
     .media-modal {
@@ -638,7 +665,21 @@
 
   <!-- User list -->
   <section>
-    <div class="section-title">Tracked users (<span id="userCount">0</span>)</div>
+    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:12px;">
+      <div class="section-title" style="margin-bottom:0">Tracked users (<span id="userCount">0</span>)</div>
+      <div style="display:flex;align-items:center;gap:6px;">
+        <span style="font-size:11px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--muted);">Sort</span>
+        <select class="sort-select" id="userSortField" onchange="setUserSortField(this.value)">
+          <option value="username">Username</option>
+          <option value="display_name">Display name</option>
+          <option value="follower_count">Followers</option>
+          <option value="video_total">Saved videos</option>
+          <option value="video_deleted">Deleted videos</option>
+          <option value="added_at">Date added</option>
+        </select>
+        <button class="sort-dir-btn" id="userSortDirBtn" onclick="toggleUserSortDir()">A → Z</button>
+      </div>
+    </div>
     <div class="users-grid" id="usersGrid">
       <div class="empty-state">No users tracked yet.</div>
     </div>
@@ -723,6 +764,7 @@
   const dismissed   = new Set();
   let runQueue      = [];   // tiktok_ids queued for manual run
   let runCurrent    = null; // tiktok_id currently being run manually
+  let userSort      = { field: 'username', dir: 'asc' };
 
   // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -790,6 +832,48 @@
 
   // ── Users ─────────────────────────────────────────────────────────────────────
 
+  const _SORT_DIR_LABELS = {
+    username:       { asc: 'A → Z',        desc: 'Z → A'        },
+    display_name:   { asc: 'A → Z',        desc: 'Z → A'        },
+    follower_count: { asc: 'Low → High',   desc: 'High → Low'   },
+    video_total:    { asc: 'Low → High',   desc: 'High → Low'   },
+    video_deleted:  { asc: 'Low → High',   desc: 'High → Low'   },
+    added_at:       { asc: 'Oldest first', desc: 'Newest first' },
+  };
+
+  function setUserSortField(field) {
+    userSort.field = field;
+    userSort.dir   = (field === 'username' || field === 'display_name') ? 'asc' : 'desc';
+    _updateUserSortBtn();
+    renderUsers();
+  }
+
+  function toggleUserSortDir() {
+    userSort.dir = userSort.dir === 'asc' ? 'desc' : 'asc';
+    _updateUserSortBtn();
+    renderUsers();
+  }
+
+  function _updateUserSortBtn() {
+    const btn = document.getElementById('userSortDirBtn');
+    if (btn) btn.textContent = _SORT_DIR_LABELS[userSort.field]?.[userSort.dir] ?? userSort.dir;
+  }
+
+  function _sortedUsers() {
+    const { field, dir } = userSort;
+    return [...users].sort((a, b) => {
+      let av = field === 'display_name' ? (a.display_name || a.username)
+             : (a[field] ?? (field === 'username' ? '' : 0));
+      let bv = field === 'display_name' ? (b.display_name || b.username)
+             : (b[field] ?? (field === 'username' ? '' : 0));
+      if (typeof av === 'string') av = av.toLowerCase();
+      if (typeof bv === 'string') bv = bv.toLowerCase();
+      if (av < bv) return dir === 'asc' ? -1 : 1;
+      if (av > bv) return dir === 'asc' ? 1 : -1;
+      return 0;
+    });
+  }
+
   function renderUsers() {
     const grid = document.getElementById('usersGrid');
     document.getElementById('userCount').textContent = users.length;
@@ -799,7 +883,7 @@
       return;
     }
 
-    grid.innerHTML = users.map(u => {
+    grid.innerHTML = _sortedUsers().map(u => {
       const isCurrent = u.username === currentUser;
       const status    = u.account_status || 'unknown';
       const privacyMap = {
@@ -1376,6 +1460,7 @@
     const { ok, data } = await apiJSON('/api/backfill');
     if (ok && data.running) {
       document.getElementById('backfillBtn').disabled = true;
+      document.getElementById('backfillStatus').textContent = `Backfilling… ${data.done}/${data.total}`;
       _startBackfillPoll();
     }
   })();

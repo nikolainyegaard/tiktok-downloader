@@ -93,6 +93,8 @@ The loop does not run automatically on startup — it waits for the first interv
 
 To process a single user immediately, click the **Run** button on their card. Multiple users can be queued this way — they run in order, one at a time.
 
+Use the **Sort** dropdown and direction toggle in the Tracked users header to order cards by username, display name, followers, saved/deleted video counts, or date added.
+
 Click anywhere on a user card (other than the Run/Remove buttons) to open a detail view showing their full profile info and a complete, sortable, filterable list of all their downloaded videos with thumbnails. From the video list:
 
 - **Click a thumbnail** to preview the image full-size in an overlay.
