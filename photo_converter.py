@@ -287,7 +287,9 @@ def start() -> bool:
 
 # Auto-run at startup (after a short delay so the DB is initialised first)
 def _startup() -> None:
+    _set(phase="startup")   # signal to UI that check is pending; running stays False
     time.sleep(8)
+    _set(phase="")          # run_conversion sets its own phase immediately after
     run_conversion("startup")
 
 threading.Thread(target=_startup, daemon=True, name="photo-converter-startup").start()
