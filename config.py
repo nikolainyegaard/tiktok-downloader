@@ -5,7 +5,7 @@ All modules import paths and settings from here.
 
 import os
 
-APP_VERSION = "1.9.0"
+APP_VERSION = "1.10.0"
 import shutil
 
 DATA_DIR     = os.environ.get("DATA_DIR",   "./data")
@@ -113,13 +113,13 @@ def cookies_info() -> dict:
     if not os.path.exists(COOKIES_PATH):
         return {"present": False}
     stat = os.stat(COOKIES_PATH)
-    # Prefer explicit upload timestamp over filesystem mtime — st_mtime is
+    # Use explicit upload timestamp; never fall back to st_mtime which is
     # unreliable on Docker volume mounts and resets on container restart.
     try:
         with open(COOKIES_TIMESTAMP_PATH, encoding="utf-8") as f:
             uploaded_at = int(f.read().strip())
     except (FileNotFoundError, ValueError):
-        uploaded_at = int(stat.st_mtime)
+        uploaded_at = None
     return {
         "present":      True,
         "updated_at":   uploaded_at,
