@@ -99,6 +99,8 @@ def _migrate_db(conn):
         "ALTER TABLE users  ADD COLUMN avatar_url     TEXT",
         "ALTER TABLE users  ADD COLUMN raw_user_data  TEXT",
         "ALTER TABLE videos ADD COLUMN stats_backfilled_at INTEGER",
+        "ALTER TABLE videos ADD COLUMN stats_error_count  INTEGER DEFAULT 0",
+        "ALTER TABLE videos ADD COLUMN stats_last_error   TEXT",
     ]
     for sql in migrations:
         try:
@@ -395,18 +397,25 @@ def get_all_username_history() -> dict:
     return result
 
 
+_STATS_ERROR_THRESHOLD = 3  # give up after this many consecutive fetch failures
+
+
 def get_videos_missing_stats() -> list[dict]:
     """Return downloaded, non-deleted videos that have never had a full stats fetch,
-    joined to get the owner's current username."""
+    joined to get the owner's current username. Excludes videos that have failed
+    too many times (permanently inaccessible on TikTok)."""
     with get_db() as conn:
         return [dict(r) for r in conn.execute(
             """SELECT v.video_id, v.tiktok_id, u.username
                FROM videos v
                JOIN users u ON u.tiktok_id = v.tiktok_id
                WHERE v.stats_backfilled_at IS NULL
+                 AND COALESCE(v.stats_error_count, 0) < ?
                  AND v.file_path IS NOT NULL
                  AND v.status != 'deleted'
-               ORDER BY v.download_date"""
+                 AND v.pending_deletion_count = 0
+               ORDER BY v.download_date""",
+            (_STATS_ERROR_THRESHOLD,)
         ).fetchall()]
 
 
@@ -418,10 +427,61 @@ def count_videos_missing_stats() -> int:
             """SELECT COUNT(*) FROM videos v
                JOIN users u ON u.tiktok_id = v.tiktok_id
                WHERE v.stats_backfilled_at IS NULL
+                 AND COALESCE(v.stats_error_count, 0) < ?
                  AND v.file_path IS NOT NULL
-                 AND v.status != 'deleted'"""
+                 AND v.status != 'deleted'
+                 AND v.pending_deletion_count = 0""",
+            (_STATS_ERROR_THRESHOLD,)
         ).fetchone()
     return row[0] if row else 0
+
+
+def count_videos_stats_failed() -> int:
+    """Count of videos that have been permanently abandoned by backfill (too many errors)."""
+    with get_db() as conn:
+        row = conn.execute(
+            """SELECT COUNT(*) FROM videos v
+               JOIN users u ON u.tiktok_id = v.tiktok_id
+               WHERE v.stats_backfilled_at IS NULL
+                 AND COALESCE(v.stats_error_count, 0) >= ?
+                 AND v.file_path IS NOT NULL
+                 AND v.status != 'deleted'""",
+            (_STATS_ERROR_THRESHOLD,)
+        ).fetchone()
+    return row[0] if row else 0
+
+
+def increment_stats_error(video_id: str, error_msg: str = "") -> int:
+    """Increment the fetch-failure counter for a video. Returns the new count."""
+    with get_db() as conn:
+        conn.execute(
+            """UPDATE videos
+               SET stats_error_count = COALESCE(stats_error_count, 0) + 1,
+                   stats_last_error  = ?
+               WHERE video_id = ?""",
+            (error_msg[:500] if error_msg else None, video_id)
+        )
+        row = conn.execute(
+            "SELECT COALESCE(stats_error_count, 0) FROM videos WHERE video_id = ?",
+            (video_id,)
+        ).fetchone()
+    return row[0] if row else 0
+
+
+def get_videos_stats_failed() -> list[dict]:
+    """Return videos permanently abandoned by backfill, with username and last error."""
+    with get_db() as conn:
+        return [dict(r) for r in conn.execute(
+            """SELECT v.video_id, u.username, v.stats_error_count, v.stats_last_error
+               FROM videos v
+               JOIN users u ON u.tiktok_id = v.tiktok_id
+               WHERE v.stats_backfilled_at IS NULL
+                 AND COALESCE(v.stats_error_count, 0) >= ?
+                 AND v.file_path IS NOT NULL
+                 AND v.status != 'deleted'
+               ORDER BY v.stats_error_count DESC""",
+            (_STATS_ERROR_THRESHOLD,)
+        ).fetchall()]
 
 
 def update_video_stats(video_id: str, view_count=None, like_count=None,

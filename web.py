@@ -135,7 +135,9 @@ def _run_backfill() -> None:
                 music_artist=details.get("music_artist"),
                 raw_video_data=details.get("_raw_video_data"),
             )
-        except Exception:
+        except Exception as e:
+            error_count = db.increment_stats_error(v["video_id"], str(e))
+            print(f"[backfill] {v['video_id']} (@{v['username']}) — fetch failed (attempt {error_count}/3): {e}")
             with _backfill_lock:
                 _backfill_state["errors"] += 1
         with _backfill_lock:
@@ -377,6 +379,10 @@ def create_app() -> Flask:
         threading.Thread(target=_run_backfill, daemon=True, name="stats-backfill").start()
         return jsonify({"ok": True})
 
+    @app.route("/api/backfill/failed", methods=["GET"])
+    def get_backfill_failed():
+        return jsonify(db.get_videos_stats_failed())
+
     @app.route("/api/stats", methods=["GET"])
     def get_aggregate_stats():
         return jsonify(db.get_aggregate_stats())
@@ -407,7 +413,8 @@ def create_app() -> Flask:
     @app.route("/api/status", methods=["GET"])
     def get_status():
         state = get_state_snapshot()
-        state["missing_stats_count"] = db.count_videos_missing_stats()
+        state["missing_stats_count"]  = db.count_videos_missing_stats()
+        state["stats_failed_count"]   = db.count_videos_stats_failed()
         return jsonify(state)
 
     @app.route("/api/trigger", methods=["POST"])

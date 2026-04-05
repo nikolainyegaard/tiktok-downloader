@@ -367,7 +367,10 @@
       object-fit: cover;
       flex-shrink: 0;
       background: var(--surface2);
+      cursor: pointer;
+      transition: opacity .15s;
     }
+    .modal-avatar:hover { opacity: .75; }
 
     .modal-user-body  { flex: 1; min-width: 0; padding-right: 32px; }
     .modal-name-row   { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
@@ -790,22 +793,11 @@
         <!-- Authentication -->
         <div class="ctrl-section">
           <div class="ctrl-section-title">Authentication</div>
-          <div class="ctrl-row" style="margin-bottom:8px;">
-            <span class="cookie-pill absent" id="cpCookiePill">
+          <div class="ctrl-row">
+            <span class="cookie-pill absent" id="cpCookiePill" style="cursor:pointer" onclick="openSettings('cookies')" title="Manage in Settings">
               <span class="dot"></span>
               <span id="cpCookiePillText">No cookies file</span>
             </span>
-            <span class="cookie-meta" id="cpCookieMeta"></span>
-          </div>
-          <div class="ctrl-row">
-            <label class="cookie-upload-label" style="font-size:12px;padding:5px 10px;">
-              <input type="file" id="cpCookieFileInput" accept=".txt,text/plain" style="display:none" onchange="uploadCookies(this)">
-              Upload cookies.txt
-            </label>
-            <button class="btn-danger" id="cpCookieDeleteBtn" onclick="deleteCookies()" style="display:none">Remove</button>
-          </div>
-          <div id="cpCookieWarning" class="ctrl-cookie-warning" style="display:none">
-            No cookies file. Downloads and profile lookups will fail without one.
           </div>
         </div>
 
@@ -815,10 +807,12 @@
           <div class="ctrl-row">
             <button class="btn-ghost" id="backfillBtn" onclick="triggerBackfill()" style="font-size:12px;padding:5px 10px;">Backfill Stats</button>
             <span id="missingStatsCount" style="font-size:12px;color:var(--muted)"></span>
+            <span id="statsFailedCount"  style="font-size:12px;color:var(--red);display:none;cursor:pointer;text-decoration:underline dotted" onclick="toggleFailedList()" title="Click to see which videos"></span>
           </div>
           <div style="margin-top:6px;min-height:16px;">
             <span id="backfillStatus" style="font-size:12px;color:var(--muted)"></span>
           </div>
+          <div id="failedList" style="display:none;margin-top:6px;font-size:11px;color:var(--muted);line-height:1.7"></div>
         </div>
 
       </div>
@@ -849,17 +843,35 @@
   <section>
     <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:12px;">
       <div class="section-title" style="margin-bottom:0">Tracked users (<span id="userCount">0</span>)</div>
-      <div style="display:flex;align-items:center;gap:6px;">
-        <span style="font-size:11px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--muted);">Sort</span>
-        <select class="sort-select" id="userSortField" onchange="setUserSortField(this.value)">
-          <option value="username">Username</option>
-          <option value="display_name">Display name</option>
-          <option value="follower_count">Followers</option>
-          <option value="video_total">Saved videos</option>
-          <option value="video_deleted">Deleted videos</option>
-          <option value="added_at">Date added</option>
-        </select>
-        <button class="sort-dir-btn" id="userSortDirBtn" onclick="toggleUserSortDir()">A → Z</button>
+      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+        <div style="display:flex;align-items:center;gap:4px;">
+          <span style="font-size:11px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--muted);">Privacy</span>
+          <div class="filter-pills">
+            <button class="filter-pill active" id="ufPrivAll"     onclick="setUserFilter('priv','all')">All</button>
+            <button class="filter-pill"        id="ufPrivPublic"  onclick="setUserFilter('priv','public')">Public</button>
+            <button class="filter-pill"        id="ufPrivPrivate" onclick="setUserFilter('priv','private')">Private</button>
+          </div>
+        </div>
+        <div style="display:flex;align-items:center;gap:4px;">
+          <span style="font-size:11px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--muted);">Status</span>
+          <div class="filter-pills">
+            <button class="filter-pill active" id="ufStatAll"    onclick="setUserFilter('stat','all')">All</button>
+            <button class="filter-pill"        id="ufStatActive" onclick="setUserFilter('stat','active')">Active</button>
+            <button class="filter-pill"        id="ufStatBanned" onclick="setUserFilter('stat','banned')">Banned</button>
+          </div>
+        </div>
+        <div style="display:flex;align-items:center;gap:4px;">
+          <span style="font-size:11px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--muted);">Sort</span>
+          <select class="sort-select" id="userSortField" onchange="setUserSortField(this.value)">
+            <option value="username">Username</option>
+            <option value="display_name">Display name</option>
+            <option value="follower_count">Followers</option>
+            <option value="video_total">Saved videos</option>
+            <option value="video_deleted">Deleted videos</option>
+            <option value="added_at">Date added</option>
+          </select>
+          <button class="sort-dir-btn" id="userSortDirBtn" onclick="toggleUserSortDir()">A → Z</button>
+        </div>
       </div>
     </div>
     <div class="users-grid" id="usersGrid">
@@ -1002,6 +1014,7 @@
   let runQueue      = [];   // tiktok_ids queued for manual run
   let runCurrent    = null; // tiktok_id currently being run manually
   let userSort      = { field: 'username', dir: 'asc' };
+  let userFilter    = { priv: 'all', stat: 'all' };
 
   // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -1023,8 +1036,11 @@
   // ── Cookie management ─────────────────────────────────────────────────────────
 
   function renderCookies(info) {
+    const timeStr = (info.present && info.updated_at)
+      ? `Uploaded ${fmt.rel(new Date(info.updated_at * 1000).toISOString())}`
+      : '';
     const metaStr = info.present
-      ? `Updated ${fmt.rel(new Date(info.updated_at * 1000).toISOString())}  ·  ${(info.size_bytes / 1024).toFixed(1)} KB`
+      ? [timeStr, `${(info.size_bytes / 1024).toFixed(1)} KB`].filter(Boolean).join('  ·  ')
       : '';
 
     // Settings modal elements
@@ -1037,17 +1053,11 @@
     if (meta)    { meta.textContent = metaStr; }
     if (delBtn)  { delBtn.style.display = info.present ? '' : 'none'; }
 
-    // Control panel elements
+    // Control panel pill (status only — full controls are in Settings)
     const cpPill    = document.getElementById('cpCookiePill');
     const cpPillTxt = document.getElementById('cpCookiePillText');
-    const cpMeta    = document.getElementById('cpCookieMeta');
-    const cpDelBtn  = document.getElementById('cpCookieDeleteBtn');
-    const cpWarning = document.getElementById('cpCookieWarning');
     if (cpPill)    { cpPill.className = info.present ? 'cookie-pill present' : 'cookie-pill absent'; }
     if (cpPillTxt) { cpPillTxt.textContent = info.present ? 'Cookies loaded' : 'No cookies file'; }
-    if (cpMeta)    { cpMeta.textContent = metaStr; }
-    if (cpDelBtn)  { cpDelBtn.style.display = info.present ? '' : 'none'; }
-    if (cpWarning) { cpWarning.style.display = info.present ? 'none' : ''; }
   }
 
   async function uploadCookies(input) {
@@ -1195,6 +1205,18 @@
     added_at:       { asc: 'Oldest first', desc: 'Newest first' },
   };
 
+  function setUserFilter(group, value) {
+    userFilter[group] = value;
+    // Update pill active states
+    const privIds = { all: 'ufPrivAll', public: 'ufPrivPublic', private: 'ufPrivPrivate' };
+    const statIds = { all: 'ufStatAll', active: 'ufStatActive', banned: 'ufStatBanned' };
+    const map = group === 'priv' ? privIds : statIds;
+    Object.entries(map).forEach(([v, id]) => {
+      document.getElementById(id)?.classList.toggle('active', v === value);
+    });
+    renderUsers();
+  }
+
   function setUserSortField(field) {
     userSort.field = field;
     userSort.dir   = (field === 'username' || field === 'display_name') ? 'asc' : 'desc';
@@ -1213,9 +1235,19 @@
     if (btn) btn.textContent = _SORT_DIR_LABELS[userSort.field]?.[userSort.dir] ?? userSort.dir;
   }
 
+  function _filteredUsers() {
+    return users.filter(u => {
+      if (userFilter.priv === 'public'  && u.privacy_status !== 'public')  return false;
+      if (userFilter.priv === 'private' && !['private_accessible','private_blocked'].includes(u.privacy_status)) return false;
+      if (userFilter.stat === 'active'  && u.account_status !== 'active')  return false;
+      if (userFilter.stat === 'banned'  && u.account_status !== 'banned')  return false;
+      return true;
+    });
+  }
+
   function _sortedUsers() {
     const { field, dir } = userSort;
-    return [...users].sort((a, b) => {
+    return _filteredUsers().sort((a, b) => {
       let av = field === 'display_name' ? (a.display_name || a.username)
              : (a[field] ?? (field === 'username' ? '' : 0));
       let bv = field === 'display_name' ? (b.display_name || b.username)
@@ -1229,11 +1261,18 @@
   }
 
   function renderUsers() {
-    const grid = document.getElementById('usersGrid');
-    document.getElementById('userCount').textContent = users.length;
+    const grid     = document.getElementById('usersGrid');
+    const filtered = _filteredUsers();
+    const isFiltered = userFilter.priv !== 'all' || userFilter.stat !== 'all';
+    document.getElementById('userCount').textContent =
+      isFiltered ? `${filtered.length} of ${users.length}` : users.length;
 
     if (!users.length) {
       grid.innerHTML = '<div class="empty-state">No users tracked yet.</div>';
+      return;
+    }
+    if (!filtered.length) {
+      grid.innerHTML = '<div class="empty-state">No users match this filter.</div>';
       return;
     }
 
@@ -1416,10 +1455,11 @@
     runQueue    = state.run_queue    || [];
     runCurrent  = state.run_current  || null;
 
+    const anyActive = isRunning || !!runCurrent;
     const badge = document.getElementById('statusBadge');
     const text  = document.getElementById('statusText');
-    badge.className = `status-badge${isRunning ? ' running' : ''}`;
-    text.textContent = isRunning
+    badge.className = `status-badge${anyActive ? ' running' : ''}`;
+    text.textContent = anyActive
       ? (currentUser ? `Downloading @${currentUser}` : 'Running…')
       : 'Idle';
 
@@ -1434,6 +1474,12 @@
     if (missingEl) {
       const n = state.missing_stats_count ?? 0;
       missingEl.textContent = n > 0 ? `${n.toLocaleString()} missing` : '';
+    }
+    const failedEl = document.getElementById('statsFailedCount');
+    if (failedEl) {
+      const f = state.stats_failed_count ?? 0;
+      failedEl.textContent   = f > 0 ? `${f.toLocaleString()} unavailable` : '';
+      failedEl.style.display = f > 0 ? '' : 'none';
     }
   }
 
@@ -1654,7 +1700,8 @@
 
     document.getElementById('modalHeader').innerHTML = `
       <img class="modal-avatar" src="/api/users/${esc(u.tiktok_id)}/avatar" alt=""
-           onerror="this.style.visibility='hidden'">
+           onerror="this.style.visibility='hidden';this.style.cursor='default';this.onclick=null"
+           onclick="openImgModalUrl('/api/users/${esc(u.tiktok_id)}/avatar')">
       <div class="modal-user-body">
         <div class="modal-name-row">
           <span class="modal-name">${esc(u.display_name || u.username)}</span>
@@ -1790,6 +1837,25 @@
     _startBackfillPoll();
   }
 
+  let _failedListOpen = false;
+
+  async function toggleFailedList() {
+    const el = document.getElementById('failedList');
+    _failedListOpen = !_failedListOpen;
+    if (!_failedListOpen) { el.style.display = 'none'; return; }
+    el.style.display = '';
+    el.textContent = 'Loading…';
+    const { ok, data } = await apiJSON('/api/backfill/failed');
+    if (!ok) { el.textContent = 'Failed to load.'; return; }
+    if (!data.length) { el.textContent = 'None.'; return; }
+    el.innerHTML = data.map(v =>
+      `<div><code style="user-select:all">${esc(v.video_id)}</code>`
+      + ` · @${esc(v.username)}`
+      + (v.stats_last_error ? ` — <span style="color:var(--red)">${esc(v.stats_last_error)}</span>` : '')
+      + `</div>`
+    ).join('');
+  }
+
   function _startBackfillPoll() {
     if (_backfillPoll) return;
     _backfillPoll = setInterval(async () => {
@@ -1804,11 +1870,11 @@
         clearInterval(_backfillPoll);
         _backfillPoll = null;
         btn.disabled = false;
-        if (data.total > 0) {
-          const ok2 = data.done - data.errors;
-          statusEl.textContent = `Done: ${ok2} updated, ${data.errors} failed`;
-          setTimeout(() => { statusEl.textContent = ''; }, 12000);
-        }
+        const ok2 = data.done - data.errors;
+        statusEl.textContent = data.total === 0
+          ? 'Nothing to backfill'
+          : `Done: ${ok2} updated, ${data.errors} failed`;
+        setTimeout(() => { statusEl.textContent = ''; }, 12000);
       }
     }, 2000);
   }
