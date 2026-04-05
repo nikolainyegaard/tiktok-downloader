@@ -55,6 +55,15 @@ def init_db():
                 FOREIGN KEY (tiktok_id) REFERENCES users(tiktok_id)
             );
 
+            CREATE TABLE IF NOT EXISTS profile_history (
+                id         INTEGER PRIMARY KEY AUTOINCREMENT,
+                tiktok_id  TEXT NOT NULL,
+                field      TEXT NOT NULL,
+                old_value  TEXT,
+                changed_at INTEGER NOT NULL,
+                FOREIGN KEY (tiktok_id) REFERENCES users(tiktok_id)
+            );
+
             CREATE TABLE IF NOT EXISTS videos (
                 video_id                TEXT PRIMARY KEY,
                 tiktok_id               TEXT NOT NULL,
@@ -101,6 +110,7 @@ def _migrate_db(conn):
         "ALTER TABLE videos ADD COLUMN stats_backfilled_at INTEGER",
         "ALTER TABLE videos ADD COLUMN stats_error_count  INTEGER DEFAULT 0",
         "ALTER TABLE videos ADD COLUMN stats_last_error   TEXT",
+        "ALTER TABLE users  ADD COLUMN banned_at          INTEGER",
     ]
     for sql in migrations:
         try:
@@ -162,6 +172,27 @@ def get_username_history(tiktok_id: str) -> list:
         ).fetchall()]
 
 
+def record_profile_change(tiktok_id: str, field: str, old_value: str | None) -> None:
+    """Record that a profile field changed, storing the old value."""
+    with get_db() as conn:
+        conn.execute(
+            "INSERT INTO profile_history (tiktok_id, field, old_value, changed_at) VALUES (?, ?, ?, ?)",
+            (tiktok_id, field, old_value, int(time.time()))
+        )
+
+
+def get_profile_history(tiktok_id: str) -> list[dict]:
+    """Return all profile history entries for a user, newest first."""
+    with get_db() as conn:
+        return [dict(r) for r in conn.execute(
+            """SELECT id, field, old_value, changed_at
+               FROM profile_history
+               WHERE tiktok_id = ?
+               ORDER BY changed_at DESC""",
+            (tiktok_id,)
+        ).fetchall()]
+
+
 def get_user(tiktok_id):
     with get_db() as conn:
         row = conn.execute(
@@ -174,14 +205,6 @@ def update_user_info(tiktok_id, username, display_name, bio,
                      follower_count, following_count, video_count,
                      sec_uid=None, verified=None, avatar_url=None, raw_user_data=None):
     with get_db() as conn:
-        existing = conn.execute(
-            "SELECT username FROM users WHERE tiktok_id = ?", (tiktok_id,)
-        ).fetchone()
-        if existing and existing["username"] != username:
-            conn.execute("""
-                INSERT INTO username_history (tiktok_id, old_username, new_username, changed_at)
-                VALUES (?, ?, ?, ?)
-            """, (tiktok_id, existing["username"], username, int(time.time())))
         conn.execute("""
             UPDATE users SET
                 sec_uid         = COALESCE(?, sec_uid),
@@ -317,10 +340,16 @@ def update_user_privacy_status(tiktok_id: str, status: str):
 
 def set_user_account_status(tiktok_id: str, status: str):
     with get_db() as conn:
-        conn.execute(
-            "UPDATE users SET account_status = ? WHERE tiktok_id = ?",
-            (status, tiktok_id),
-        )
+        if status == "banned":
+            conn.execute(
+                "UPDATE users SET account_status = ?, banned_at = COALESCE(banned_at, ?) WHERE tiktok_id = ?",
+                (status, int(time.time()), tiktok_id),
+            )
+        else:
+            conn.execute(
+                "UPDATE users SET account_status = ? WHERE tiktok_id = ?",
+                (status, tiktok_id),
+            )
 
 
 def increment_user_pending_ban(tiktok_id: str) -> int:
@@ -386,15 +415,36 @@ def rename_user_video_paths(tiktok_id: str, old_username: str, new_username: str
 
 
 def get_all_username_history() -> dict:
-    """Return all past usernames keyed by tiktok_id, oldest first."""
+    """Return all past usernames keyed by tiktok_id, oldest first. Reads from profile_history."""
     with get_db() as conn:
         rows = conn.execute(
-            "SELECT tiktok_id, old_username FROM username_history ORDER BY changed_at"
+            "SELECT tiktok_id, old_value FROM profile_history WHERE field = 'username' ORDER BY changed_at"
         ).fetchall()
     result: dict = {}
     for row in rows:
-        result.setdefault(row["tiktok_id"], []).append(row["old_username"])
+        result.setdefault(row["tiktok_id"], []).append(row["old_value"])
     return result
+
+
+def migrate_username_history_to_profile_history() -> int:
+    """One-time migration: copy username_history rows into profile_history.
+    Safe to run multiple times — skips rows already present (matched on tiktok_id + old_value + changed_at)."""
+    with get_db() as conn:
+        conn.execute("""
+            INSERT INTO profile_history (tiktok_id, field, old_value, changed_at)
+            SELECT uh.tiktok_id, 'username', uh.old_username, uh.changed_at
+            FROM username_history uh
+            WHERE NOT EXISTS (
+                SELECT 1 FROM profile_history ph
+                WHERE ph.tiktok_id  = uh.tiktok_id
+                  AND ph.field      = 'username'
+                  AND ph.old_value  = uh.old_username
+                  AND ph.changed_at = uh.changed_at
+            )
+        """)
+        return conn.execute(
+            "SELECT COUNT(*) FROM profile_history WHERE field = 'username'"
+        ).fetchone()[0]
 
 
 _STATS_ERROR_THRESHOLD = 3  # give up after this many consecutive fetch failures
@@ -519,6 +569,29 @@ def get_all_user_ids() -> set:
     """Return the set of all tiktok_ids currently in the users table."""
     with get_db() as conn:
         return {row[0] for row in conn.execute("SELECT tiktok_id FROM users").fetchall()}
+
+
+def get_recent_activity() -> dict:
+    """Return recent deletions, profile changes, and bans for the Recent panel."""
+    with get_db() as conn:
+        deletions = [dict(r) for r in conn.execute(
+            """SELECT v.video_id, v.deleted_at, u.username, u.tiktok_id
+               FROM videos v JOIN users u ON u.tiktok_id = v.tiktok_id
+               WHERE v.status = 'deleted' AND v.deleted_at IS NOT NULL
+               ORDER BY v.deleted_at DESC LIMIT 3"""
+        ).fetchall()]
+        profile_changes = [dict(r) for r in conn.execute(
+            """SELECT ph.field, ph.changed_at, u.username, u.tiktok_id
+               FROM profile_history ph JOIN users u ON u.tiktok_id = ph.tiktok_id
+               ORDER BY ph.changed_at DESC LIMIT 3"""
+        ).fetchall()]
+        bans = [dict(r) for r in conn.execute(
+            """SELECT tiktok_id, username, banned_at
+               FROM users
+               WHERE account_status = 'banned' AND banned_at IS NOT NULL
+               ORDER BY banned_at DESC LIMIT 1"""
+        ).fetchall()]
+    return {"deletions": deletions, "profile_changes": profile_changes, "bans": bans}
 
 
 def get_aggregate_stats() -> dict:

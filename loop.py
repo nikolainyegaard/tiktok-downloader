@@ -117,6 +117,20 @@ async def _process_single_user(user: dict, cookies: dict):
 
         try:
             info = await _fetch_user_info(user["username"], sec_uid=user.get("sec_uid"))
+
+            # Record profile field changes before overwriting stored values
+            _field_labels = {"username": "Username", "display_name": "Display name", "bio": "Bio"}
+            _profile_fields = {
+                "username":     (user.get("username"),     info.get("username")),
+                "display_name": (user.get("display_name"), info.get("display_name")),
+                "bio":          (user.get("bio"),          info.get("bio")),
+            }
+            for _field, (_old, _new) in _profile_fields.items():
+                if _new is not None and _new != _old:
+                    db.record_profile_change(tiktok_id, _field, _old)
+                    if _field != "username":  # username gets its own log line below
+                        _log(f"  Profile change: {_field_labels[_field]} updated")
+
             db.update_user_info(
                 tiktok_id,
                 info["username"],
@@ -140,7 +154,8 @@ async def _process_single_user(user: dict, cookies: dict):
                     _log(f"  Folder renamed and DB paths updated")
             is_private = info.get("is_private", False)
             if info.get("avatar_url"):
-                cache_avatar(tiktok_id, info["avatar_url"])
+                if cache_avatar(tiktok_id, info["avatar_url"]) == "changed":
+                    _log(f"  Profile change: avatar changed")
         except Exception as e:
             _log(f"  Failed to fetch profile info: {e}")
             username     = user["username"]
