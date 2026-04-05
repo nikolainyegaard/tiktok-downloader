@@ -346,6 +346,21 @@ def create_app() -> Flask:
             return ("", 404)
         return send_file(path, mimetype="image/jpeg")
 
+    @app.route("/api/users/<tiktok_id>/avatar-history/<filename>", methods=["GET"])
+    def user_avatar_history(tiktok_id: str, filename: str):
+        # Restrict to safe filenames: only {tiktok_id}_{digits}.jpg
+        import re as _re
+        if not _re.fullmatch(r"[0-9]+_[0-9]+\.jpg", filename):
+            return ("", 400)
+        path = os.path.join(AVATARS_DIR, filename)
+        if not os.path.exists(path):
+            return ("", 404)
+        return send_file(path, mimetype="image/jpeg")
+
+    @app.route("/api/users/<tiktok_id>/profile-history", methods=["GET"])
+    def user_profile_history(tiktok_id: str):
+        return jsonify(db.get_profile_history(tiktok_id))
+
     @app.route("/api/videos/<video_id>/thumbnail", methods=["GET"])
     def video_thumbnail(video_id: str):
         video = db.get_video(video_id)
@@ -386,6 +401,10 @@ def create_app() -> Flask:
     @app.route("/api/stats", methods=["GET"])
     def get_aggregate_stats():
         return jsonify(db.get_aggregate_stats())
+
+    @app.route("/api/recent", methods=["GET"])
+    def get_recent():
+        return jsonify(db.get_recent_activity())
 
     @app.route("/api/db/cleanup", methods=["GET"])
     def get_cleanup_status():

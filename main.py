@@ -76,6 +76,9 @@ if __name__ == "__main__":
     if n:
         print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Migration: renamed {n} del_-prefixed video file(s) and updated DB paths.")
 
+    n = db.migrate_username_history_to_profile_history()
+    print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Migration: {n} username history record(s) in profile_history.")
+
     app = create_app()
 
     print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Starting loop thread...")

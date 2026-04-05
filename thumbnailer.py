@@ -37,21 +37,50 @@ def avatar_path(tiktok_id: str) -> str:
 def cache_avatar(tiktok_id: str, avatar_url: str) -> bool:
     """
     Download avatar_url and save it to the local avatars cache.
-    Called each time user info is refreshed so the cached file stays current.
+    If the image differs from the cached version, the old file is archived as
+    {tiktok_id}_{timestamp}.jpg and the change is recorded in profile_history.
     Returns True on success, False on failure.
     """
     if not avatar_url:
         return False
+    import hashlib
+    import shutil
     import urllib.request
     os.makedirs(AVATARS_DIR, exist_ok=True)
-    path = avatar_path(tiktok_id)
+    path     = avatar_path(tiktok_id)
+    tmp_path = path + ".tmp"
     try:
-        urllib.request.urlretrieve(avatar_url, path)
-        return True
+        urllib.request.urlretrieve(avatar_url, tmp_path)
     except Exception:
         try:
-            if os.path.exists(path):
-                os.remove(path)
+            os.remove(tmp_path)
+        except OSError:
+            pass
+        return False
+
+    try:
+        def _md5(p: str) -> str:
+            h = hashlib.md5()
+            with open(p, "rb") as f:
+                for chunk in iter(lambda: f.read(65536), b""):
+                    h.update(chunk)
+            return h.hexdigest()
+
+        changed = False
+        if os.path.exists(path):
+            if _md5(path) != _md5(tmp_path):
+                # Avatar changed — archive the old file and record history
+                ts   = int(time.time())
+                arch = os.path.join(AVATARS_DIR, f"{tiktok_id}_{ts}.jpg")
+                shutil.copy2(path, arch)
+                db.record_profile_change(tiktok_id, "avatar", f"{tiktok_id}_{ts}.jpg")
+                changed = True
+
+        os.replace(tmp_path, path)
+        return "changed" if changed else "unchanged"
+    except Exception:
+        try:
+            os.remove(tmp_path)
         except OSError:
             pass
         return False

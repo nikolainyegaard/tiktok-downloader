@@ -131,6 +131,16 @@
     .cookie-pill.absent  { background: rgba(224,82,82,.15);  color: var(--red); }
     .cookie-pill .dot    { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
 
+    .backfill-pill {
+      display: inline-flex; align-items: center; gap: 5px;
+      font-size: 11px; font-weight: 600;
+      padding: 3px 9px; border-radius: 99px;
+      cursor: pointer; white-space: nowrap;
+      background: rgba(224,168,58,.15); color: var(--yellow);
+      transition: background .1s;
+    }
+    .backfill-pill:hover { background: rgba(224,168,58,.28); }
+
     .cookie-meta { font-size: 12px; color: var(--text-dim); }
 
     .cookie-upload-label {
@@ -237,13 +247,26 @@
       gap: 10px;
     }
 
-    .user-avatar {
-      width: 48px;
-      height: 48px;
+    .avatar-wrap {
+      position: relative;
+      width: 48px; height: 48px;
       border-radius: 50%;
-      object-fit: cover;
       flex-shrink: 0;
       background: var(--surface2);
+      display: flex; align-items: center; justify-content: center;
+    }
+    .avatar-wrap .avatar-letter {
+      font-size: 18px; font-weight: 700;
+      color: var(--muted);
+      text-transform: uppercase;
+      pointer-events: none;
+      user-select: none;
+    }
+    .user-avatar {
+      position: absolute; inset: 0;
+      width: 48px; height: 48px;
+      border-radius: 50%;
+      object-fit: cover;
       cursor: pointer;
       transition: opacity .15s;
     }
@@ -257,8 +280,10 @@
 
     .user-badges { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; flex-shrink: 0; }
 
-    .user-stats { display: flex; gap: 16px; font-size: 12px; color: var(--text-dim); flex-wrap: wrap; }
-    .stat-item strong { color: var(--text); }
+    .user-stats { display: flex; gap: 16px; flex-wrap: wrap; }
+    .stat-item { display: flex; flex-direction: column; gap: 1px; }
+    .stat-item-label { font-size: 11px; color: var(--muted); }
+    .stat-item-value { font-size: 13px; font-weight: 700; color: var(--text); }
 
     .account-status { display: inline-block; font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 99px; white-space: nowrap; }
     .account-status.active  { background: rgba(76,175,125,.15); color: var(--green); }
@@ -361,12 +386,26 @@
       flex-shrink: 0;
     }
 
+    .modal-avatar-wrap {
+      position: relative;
+      width: 72px; height: 72px;
+      border-radius: 50%;
+      flex-shrink: 0;
+      background: var(--surface2);
+      display: flex; align-items: center; justify-content: center;
+    }
+    .modal-avatar-wrap .avatar-letter {
+      font-size: 26px; font-weight: 700;
+      color: var(--muted);
+      text-transform: uppercase;
+      pointer-events: none;
+      user-select: none;
+    }
     .modal-avatar {
+      position: absolute; inset: 0;
       width: 72px; height: 72px;
       border-radius: 50%;
       object-fit: cover;
-      flex-shrink: 0;
-      background: var(--surface2);
       cursor: pointer;
       transition: opacity .15s;
     }
@@ -383,6 +422,35 @@
     .modal-stats-row  { display: flex; gap: 20px; margin-top: 10px; font-size: 12px;
                         color: var(--text-dim); flex-wrap: wrap; }
     .modal-stats-row strong { color: var(--text); font-size: 13px; }
+
+    /* ── Profile history panel ───────────────────────────────────────────────── */
+
+    .phist-panel {
+      flex: 1; overflow-y: auto; padding: 16px 20px;
+      display: flex; flex-direction: column; gap: 8px;
+    }
+    .phist-empty { color: var(--muted); font-size: 13px; padding: 20px 0; text-align: center; }
+    .phist-entry {
+      display: flex; align-items: flex-start; gap: 12px;
+      padding: 10px 12px;
+      border-radius: var(--radius);
+      background: var(--surface);
+      border: 1px solid var(--border);
+    }
+    .phist-avatar-thumb {
+      width: 48px; height: 48px; border-radius: 50%;
+      object-fit: cover; flex-shrink: 0;
+      background: var(--surface2); cursor: pointer;
+      transition: opacity .15s;
+    }
+    .phist-avatar-thumb:hover { opacity: .75; }
+    .phist-text { flex: 1; min-width: 0; }
+    .phist-value {
+      font-size: 13px; color: var(--text); word-break: break-word;
+      white-space: pre-wrap; line-height: 1.5;
+    }
+    .phist-value.empty { color: var(--muted); font-style: italic; }
+    .phist-date { font-size: 11px; color: var(--muted); margin-top: 3px; }
 
     /* ── Modal toolbar ────────────────────────────────────────────────────────── */
 
@@ -451,6 +519,11 @@
     }
     .video-row:hover   { background: var(--surface2); }
     .video-row:last-child { border-bottom: none; }
+    @keyframes highlight-fade {
+      0%   { background: rgba(224,168,58,.30); }
+      100% { background: transparent; }
+    }
+    .video-row-highlight { animation: highlight-fade 2.5s ease-out forwards; }
 
     .video-thumb {
       width: 90px; height: 51px;
@@ -627,6 +700,23 @@
       color: var(--muted);
     }
 
+    /* Recent panel entries */
+    .recent-entry {
+      display: grid;
+      grid-template-columns: auto 1fr auto;
+      gap: 6px;
+      align-items: baseline;
+      font-size: 12px;
+      padding: 3px 6px;
+      border-radius: 4px;
+      cursor: pointer;
+    }
+    .recent-entry:hover { background: var(--surface2); }
+    .recent-date   { font-size: 11px; color: var(--muted); white-space: nowrap; }
+    .recent-name   { color: var(--accent); font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .recent-detail { font-size: 11px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-family: var(--mono); }
+    .recent-empty  { font-size: 11px; color: var(--muted); padding: 2px 6px; }
+
     /* Control sections */
     .ctrl-section {
       padding-bottom: 14px;
@@ -745,11 +835,12 @@
       white-space: pre-wrap;
       word-break: break-all;
     }
-    .log-body .log-sep  { color: var(--accent); }
-    .log-body .log-user { color: var(--accent); }
-    .log-body .log-err  { color: var(--red); }
-    .log-body .log-warn { color: var(--yellow); }
-    .log-body .log-dl   { color: var(--green); }
+    .log-body .log-sep     { color: var(--text); font-weight: 700; }
+    .log-body .log-user    { color: var(--accent); }
+    .log-body .log-err     { color: var(--red); }
+    .log-body .log-warn    { color: var(--yellow); }
+    .log-body .log-dl      { color: var(--green); }
+    .log-body .log-profile { color: #c084fc; }
   </style>
 </head>
 <body>
@@ -763,6 +854,12 @@
       <span id="statusText">Idle</span>
     </span>
     <div class="header-meta">
+      <span class="cookie-pill absent" id="hdrCookiePill" style="cursor:pointer" onclick="openSettings('cookies')" title="Manage cookies in Settings">
+        <span class="dot"></span><span id="hdrCookiePillText">No cookies</span>
+      </span>
+      <span class="backfill-pill" id="hdrBackfillPill" style="display:none" onclick="openSettings('backfill')" title="Videos with missing stats">
+        <span id="hdrBackfillCount"></span> missing stats
+      </span>
       <span id="lastRun"></span>
       <span id="nextRun"></span>
       <button class="btn-primary" id="triggerBtn" onclick="triggerLoop()">Run Now</button>
@@ -770,7 +867,7 @@
     </div>
   </header>
 
-  <!-- Top panels: Stats + Controls -->
+  <!-- Top panels: Stats + Recent -->
   <div class="top-panels">
 
     <!-- Statistics panel -->
@@ -783,38 +880,13 @@
       </div>
     </div>
 
-    <!-- Controls panel -->
+    <!-- Recent panel -->
     <div class="panel-card">
       <div class="panel-header">
-        <span class="section-title" style="margin-bottom:0">Controls</span>
+        <span class="section-title" style="margin-bottom:0">Recent</span>
       </div>
-      <div class="panel-body">
-
-        <!-- Authentication -->
-        <div class="ctrl-section">
-          <div class="ctrl-section-title">Authentication</div>
-          <div class="ctrl-row">
-            <span class="cookie-pill absent" id="cpCookiePill" style="cursor:pointer" onclick="openSettings('cookies')" title="Manage in Settings">
-              <span class="dot"></span>
-              <span id="cpCookiePillText">No cookies file</span>
-            </span>
-          </div>
-        </div>
-
-        <!-- Backfill -->
-        <div class="ctrl-section">
-          <div class="ctrl-section-title">Stats Backfill</div>
-          <div class="ctrl-row">
-            <button class="btn-ghost" id="backfillBtn" onclick="triggerBackfill()" style="font-size:12px;padding:5px 10px;">Backfill Stats</button>
-            <span id="missingStatsCount" style="font-size:12px;color:var(--muted)"></span>
-            <span id="statsFailedCount"  style="font-size:12px;color:var(--red);display:none;cursor:pointer;text-decoration:underline dotted" onclick="toggleFailedList()" title="Click to see which videos"></span>
-          </div>
-          <div style="margin-top:6px;min-height:16px;">
-            <span id="backfillStatus" style="font-size:12px;color:var(--muted)"></span>
-          </div>
-          <div id="failedList" style="display:none;margin-top:6px;font-size:11px;color:var(--muted);line-height:1.7"></div>
-        </div>
-
+      <div class="panel-body" style="gap:10px" id="recentPanel">
+        <div style="color:var(--muted);font-size:12px">Loading…</div>
       </div>
     </div>
 
@@ -902,7 +974,8 @@
   <div class="settings-modal">
     <button class="modal-close" onclick="closeSettings()">✕</button>
     <nav class="settings-nav">
-      <div class="settings-nav-item active" id="snav-cookies" onclick="switchSettingsSection('cookies')">Cookies</div>
+      <div class="settings-nav-item active" id="snav-cookies"  onclick="switchSettingsSection('cookies')">Cookies</div>
+      <div class="settings-nav-item"        id="snav-backfill" onclick="switchSettingsSection('backfill')">Backfill</div>
       <div class="settings-nav-item"        id="snav-database" onclick="switchSettingsSection('database')">Database</div>
     </nav>
     <div class="settings-content">
@@ -930,6 +1003,23 @@
           The file must be in Netscape format and include the <code>msToken</code> cookie.
           Cookies are stored server-side — uploading once from any device applies everywhere.
         </div>
+      </div>
+
+      <!-- Backfill section -->
+      <div id="ssec-backfill" style="display:none">
+        <div class="settings-section-title">Stats Backfill</div>
+        <p style="font-size:13px;color:var(--text-dim);line-height:1.5;margin-bottom:16px;">
+          Fetches view counts, likes, and other metadata for downloaded videos that are missing stats.
+        </p>
+        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:8px;">
+          <button class="btn-primary" id="backfillBtn" onclick="triggerBackfill()" style="font-size:12px;padding:5px 14px;">Run Backfill</button>
+          <span id="missingStatsCount" style="font-size:12px;color:var(--muted)"></span>
+          <span id="statsFailedCount"  style="font-size:12px;color:var(--red);display:none;cursor:pointer;text-decoration:underline dotted" onclick="toggleFailedList()" title="Click to see which videos"></span>
+        </div>
+        <div style="min-height:16px;margin-bottom:6px;">
+          <span id="backfillStatus" style="font-size:12px;color:var(--muted)"></span>
+        </div>
+        <div id="failedList" style="display:none;font-size:11px;color:var(--muted);line-height:1.7"></div>
       </div>
 
       <!-- Database section -->
@@ -974,6 +1064,7 @@
     <button class="modal-close" onclick="closeModal()">✕</button>
     <div class="modal-header"  id="modalHeader"></div>
     <div class="modal-toolbar" id="modalToolbar"></div>
+    <div class="phist-panel"    id="phistPanel" style="display:none"></div>
     <div class="video-list-hdr" id="videoListHdr"></div>
     <div class="modal-video-list" id="modalVideoList"></div>
   </div>
@@ -1053,11 +1144,11 @@
     if (meta)    { meta.textContent = metaStr; }
     if (delBtn)  { delBtn.style.display = info.present ? '' : 'none'; }
 
-    // Control panel pill (status only — full controls are in Settings)
-    const cpPill    = document.getElementById('cpCookiePill');
-    const cpPillTxt = document.getElementById('cpCookiePillText');
-    if (cpPill)    { cpPill.className = info.present ? 'cookie-pill present' : 'cookie-pill absent'; }
-    if (cpPillTxt) { cpPillTxt.textContent = info.present ? 'Cookies loaded' : 'No cookies file'; }
+    // Header pill
+    const hdrPill    = document.getElementById('hdrCookiePill');
+    const hdrPillTxt = document.getElementById('hdrCookiePillText');
+    if (hdrPill)    { hdrPill.className = `cookie-pill ${info.present ? 'present' : 'absent'}`; }
+    if (hdrPillTxt) { hdrPillTxt.textContent = info.present ? 'Cookies' : 'No cookies'; }
   }
 
   async function uploadCookies(input) {
@@ -1122,6 +1213,78 @@
     if (ok) renderStats(data);
   }
 
+  // ── Recent panel ──────────────────────────────────────────────────────────────
+
+  const _FIELD_LABELS = {
+    username: 'Username', display_name: 'Display name', bio: 'Bio', avatar: 'Avatar',
+  };
+
+  function _recentDate(ts) {
+    const d     = new Date(ts * 1000);
+    const now   = new Date();
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const dDay  = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+    const diffDays = Math.round((today - dDay) / 86400000);
+    const timeStr = d.toLocaleString('en-GB', { hour: '2-digit', minute: '2-digit' });
+    if (diffDays === 0) return `Today, ${timeStr}`;
+    if (diffDays === 1) return `Yesterday, ${timeStr}`;
+    return d.toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+  }
+
+  function renderRecent(data) {
+    const panel = document.getElementById('recentPanel');
+    if (!panel) return;
+    let html = '';
+
+    // Recently deleted
+    html += `<div style="font-size:10px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--muted);margin-bottom:2px">Recently deleted</div>`;
+    if (data.deletions.length) {
+      html += data.deletions.map(d =>
+        `<div class="recent-entry" onclick="openUserModalAndHighlight('${esc(d.tiktok_id)}','${esc(d.video_id)}')" title="Open @${esc(d.username)}">
+          <span class="recent-date">${_recentDate(d.deleted_at)}</span>
+          <span class="recent-name">@${esc(d.username)}</span>
+          <span class="recent-detail">${esc(d.video_id)}</span>
+        </div>`
+      ).join('');
+    } else {
+      html += `<div class="recent-empty">No deleted videos yet</div>`;
+    }
+
+    // Recently changed profile
+    html += `<div style="font-size:10px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--muted);margin:8px 0 2px">Recently changed profile</div>`;
+    if (data.profile_changes.length) {
+      html += data.profile_changes.map(p =>
+        `<div class="recent-entry" onclick="openUserModalWithHistory('${esc(p.tiktok_id)}','${esc(p.field)}')" title="Open @${esc(p.username)} · ${esc(_FIELD_LABELS[p.field] || p.field)} history">
+          <span class="recent-date">${_recentDate(p.changed_at)}</span>
+          <span class="recent-name">@${esc(p.username)}</span>
+          <span class="recent-detail">${esc(_FIELD_LABELS[p.field] || p.field)}</span>
+        </div>`
+      ).join('');
+    } else {
+      html += `<div class="recent-empty">No profile changes recorded yet</div>`;
+    }
+
+    // Recently banned
+    html += `<div style="font-size:10px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--muted);margin:8px 0 2px">Recently banned</div>`;
+    if (data.bans.length) {
+      const b = data.bans[0];
+      html += `<div class="recent-entry" onclick="openUserModal('${esc(b.tiktok_id)}')" title="Open @${esc(b.username)}">
+        <span class="recent-date">${_recentDate(b.banned_at)}</span>
+        <span class="recent-name">@${esc(b.username)}</span>
+        <span class="recent-detail" style="color:var(--red)">Banned</span>
+      </div>`;
+    } else {
+      html += `<div class="recent-empty">No banned accounts</div>`;
+    }
+
+    panel.innerHTML = html;
+  }
+
+  async function loadRecent() {
+    const { ok, data } = await apiJSON('/api/recent');
+    if (ok) renderRecent(data);
+  }
+
   // ── Settings modal ────────────────────────────────────────────────────────────
 
   let _settingsSection = 'cookies';
@@ -1139,7 +1302,7 @@
 
   function switchSettingsSection(name) {
     _settingsSection = name;
-    ['cookies', 'database'].forEach(s => {
+    ['cookies', 'backfill', 'database'].forEach(s => {
       document.getElementById(`ssec-${s}`).style.display    = s === name ? '' : 'none';
       document.getElementById(`snav-${s}`).classList.toggle('active', s === name);
     });
@@ -1305,9 +1468,12 @@
       return `
         <div class="user-card${isCurrent ? ' user-card-current' : ''}" onclick="if(!event.target.closest('button'))openUserModal('${esc(u.tiktok_id)}')" role="button" tabindex="0">
           <div class="user-card-top">
-            <img class="user-avatar" src="/api/users/${esc(u.tiktok_id)}/avatar" alt=""
-                 onerror="this.style.opacity='.15';this.style.cursor='default';this.onclick=null"
-                 onclick="event.stopPropagation();openImgModalUrl('/api/users/${esc(u.tiktok_id)}/avatar')">
+            <div class="avatar-wrap">
+              <span class="avatar-letter">${esc((u.username||'?')[0])}</span>
+              <img class="user-avatar" src="/api/users/${esc(u.tiktok_id)}/avatar" alt=""
+                   onerror="this.style.display='none'"
+                   onclick="event.stopPropagation();openImgModalUrl('/api/users/${esc(u.tiktok_id)}/avatar')">
+            </div>
             <div class="user-identity">
               <div class="user-display-name">${esc(u.display_name || u.username)}</div>
               <div class="user-handle">@${esc(u.username)}${oldNameTag}</div>
@@ -1324,10 +1490,10 @@
           </div>
 
           <div class="user-stats">
-            <span class="stat-item"><strong>${(u.follower_count||0).toLocaleString()}</strong> followers</span>
-            <span class="stat-item"><strong>${u.video_total||0}</strong> saved</span>
-            ${u.video_deleted   ? `<span class="stat-item" style="color:var(--red)"><strong>${u.video_deleted}</strong> deleted</span>` : ''}
-            ${u.video_undeleted ? `<span class="stat-item" style="color:var(--yellow)"><strong>${u.video_undeleted}</strong> restored</span>` : ''}
+            <span class="stat-item"><span class="stat-item-label">followers</span><span class="stat-item-value">${(u.follower_count||0).toLocaleString()}</span></span>
+            <span class="stat-item"><span class="stat-item-label">saved</span><span class="stat-item-value">${u.video_total||0}</span></span>
+            ${u.video_deleted   ? `<span class="stat-item"><span class="stat-item-label">deleted</span><span class="stat-item-value" style="color:var(--red)">${u.video_deleted}</span></span>` : ''}
+            ${u.video_undeleted ? `<span class="stat-item"><span class="stat-item-label">restored</span><span class="stat-item-value" style="color:var(--yellow)">${u.video_undeleted}</span></span>` : ''}
           </div>
 
           <div class="user-card-footer">
@@ -1481,6 +1647,15 @@
       failedEl.textContent   = f > 0 ? `${f.toLocaleString()} unavailable` : '';
       failedEl.style.display = f > 0 ? '' : 'none';
     }
+
+    // Header backfill pill — visible only when there's work to do
+    const bfPill  = document.getElementById('hdrBackfillPill');
+    const bfCount = document.getElementById('hdrBackfillCount');
+    if (bfPill && bfCount) {
+      const n = state.missing_stats_count ?? 0;
+      bfCount.textContent  = n.toLocaleString();
+      bfPill.style.display = n > 0 ? '' : 'none';
+    }
   }
 
   function clearLog() {
@@ -1500,11 +1675,12 @@
 
     newLines.forEach(line => {
       const span = document.createElement('span');
-      if      (line.includes('=== Loop'))            span.className = 'log-sep';
-      else if (/\] Processing @/.test(line))          span.className = 'log-user';
-      else if (/error|failed|unexpected/i.test(line)) span.className = 'log-err';
-      else if (/warn|deleted|corrupt/i.test(line))    span.className = 'log-warn';
-      else if (/download|saved/i.test(line))          span.className = 'log-dl';
+      if      (line.includes('=== Loop'))                   span.className = 'log-sep';
+      else if (/\] Processing @/.test(line))                span.className = 'log-user';
+      else if (/error|failed|unexpected/i.test(line))       span.className = 'log-err';
+      else if (/warn|deleted|corrupt/i.test(line))          span.className = 'log-warn';
+      else if (/download|saved/i.test(line))                span.className = 'log-dl';
+      else if (/Profile change:|avatar changed/i.test(line)) span.className = 'log-profile';
       span.textContent = line + '\n';
       body.appendChild(span);
     });
@@ -1533,10 +1709,11 @@
 
   // ── User detail modal ─────────────────────────────────────────────────────────
 
-  let _modalUserId   = null;
-  let _modalVideos   = [];
-  let _modalFilter   = 'all';
-  let _modalSort     = { field: 'upload_date', dir: 'desc' };
+  let _modalUserId          = null;
+  let _modalVideos          = [];
+  let _modalFilter          = 'all';
+  let _modalSort            = { field: 'upload_date', dir: 'desc' };
+  let _modalPendingHighlight = null;   // video_id to scroll-to after load
   let _modalLoaded   = 0;
   let _modalObs      = null;
   const MODAL_PAGE   = 50;
@@ -1575,6 +1752,14 @@
     _modalLoaded = 0;
     if (_modalObs) { _modalObs.disconnect(); _modalObs = null; }
 
+    // Reset history panel state
+    _phistData   = [];
+    _phistField  = 'all';
+    _phistUserId = null;
+    document.getElementById('phistPanel').style.display     = 'none';
+    document.getElementById('videoListHdr').style.display   = '';
+    document.getElementById('modalVideoList').style.display = '';
+
     document.getElementById('modalBackdrop').style.display = 'flex';
     document.body.style.overflow = 'hidden';
 
@@ -1585,6 +1770,16 @@
       '<div class="vlist-loading">Loading videos…</div>';
 
     _loadModalVideos(tiktokId);
+  }
+
+  function openUserModalAndHighlight(tiktokId, videoId) {
+    _modalPendingHighlight = videoId;
+    openUserModal(tiktokId);
+  }
+
+  function openUserModalWithHistory(tiktokId, field) {
+    openUserModal(tiktokId);
+    openProfileHistory(field);
   }
 
   function closeModal() {
@@ -1651,8 +1846,24 @@
     const { ok, data } = await apiJSON(`/api/users/${tiktokId}/videos`);
     if (!ok || _modalUserId !== tiktokId) return;
     _modalVideos = data;
-    _renderModalToolbar(data);
-    _renderModalVideoList();
+
+    if (_modalPendingHighlight) {
+      const vid = _modalPendingHighlight;
+      _modalPendingHighlight = null;
+      _modalFilter = 'deleted';
+      _modalSort   = { field: 'deleted_at', dir: 'desc' };
+      _renderColumnHdrs();
+      _renderModalToolbar(data);
+      _renderModalVideoList();
+      const row = document.querySelector(`[data-video-id="${CSS.escape(vid)}"]`);
+      if (row) {
+        row.scrollIntoView({ block: 'center' });
+        row.classList.add('video-row-highlight');
+      }
+    } else {
+      _renderModalToolbar(data);
+      _renderModalVideoList();
+    }
   }
 
   function _filteredSorted() {
@@ -1699,9 +1910,12 @@
       : '';
 
     document.getElementById('modalHeader').innerHTML = `
-      <img class="modal-avatar" src="/api/users/${esc(u.tiktok_id)}/avatar" alt=""
-           onerror="this.style.visibility='hidden';this.style.cursor='default';this.onclick=null"
-           onclick="openImgModalUrl('/api/users/${esc(u.tiktok_id)}/avatar')">
+      <div class="modal-avatar-wrap">
+        <span class="avatar-letter">${esc((u.username||'?')[0])}</span>
+        <img class="modal-avatar" src="/api/users/${esc(u.tiktok_id)}/avatar" alt=""
+             onerror="this.style.display='none'"
+             onclick="openImgModalUrl('/api/users/${esc(u.tiktok_id)}/avatar')">
+      </div>
       <div class="modal-user-body">
         <div class="modal-name-row">
           <span class="modal-name">${esc(u.display_name || u.username)}</span>
@@ -1748,7 +1962,118 @@
       + (counts.deleted  ? pill('deleted',  'Deleted')  : '')
       + (counts.restored ? pill('restored', 'Restored') : '')
       + `</div>`
-      + `<span class="modal-vid-count">${shown.toLocaleString()} video${shown !== 1 ? 's' : ''}</span>`;
+      + `<span class="modal-vid-count">${shown.toLocaleString()} video${shown !== 1 ? 's' : ''}</span>`
+      + `<button class="filter-pill" style="margin-left:auto" onclick="openProfileHistory()">Profile history</button>`;
+  }
+
+  // ── Profile history ──────────────────────────────────────────────────────────
+
+  let _phistField  = 'all';
+  let _phistData   = [];
+  let _phistUserId = null;
+
+  const _PHIST_FIELD_LABELS = {
+    all:          'All',
+    username:     'Username',
+    display_name: 'Display name',
+    bio:          'Bio',
+    avatar:       'Avatar',
+  };
+
+  async function openProfileHistory(field) {
+    _phistUserId = _modalUserId;
+    if (!_phistUserId) return;
+    if (field) _phistField = field;
+
+    // Toggle off if already open
+    if (document.getElementById('phistPanel').style.display !== 'none') {
+      _closeProfileHistory();
+      return;
+    }
+
+    document.getElementById('phistPanel').style.display = '';
+    document.getElementById('videoListHdr').style.display  = 'none';
+    document.getElementById('modalVideoList').style.display = 'none';
+    document.getElementById('phistPanel').innerHTML = '<div class="phist-empty">Loading…</div>';
+
+    _renderHistoryToolbar();
+
+    const { ok, data } = await apiJSON(`/api/users/${encodeURIComponent(_phistUserId)}/profile-history`);
+    if (!ok) {
+      document.getElementById('phistPanel').innerHTML = '<div class="phist-empty">Failed to load history.</div>';
+      return;
+    }
+    _phistData = data;
+    // keep _phistField if it was pre-set by openUserModalWithHistory, otherwise default to 'all'
+    if (!field) _phistField = 'all';
+    _renderHistoryToolbar();
+    _renderHistoryEntries();
+  }
+
+  function _closeProfileHistory() {
+    document.getElementById('phistPanel').style.display     = 'none';
+    document.getElementById('videoListHdr').style.display   = '';
+    document.getElementById('modalVideoList').style.display = '';
+    // Restore normal toolbar
+    if (_modalVideos.length) _renderModalToolbar(_modalVideos);
+  }
+
+  function setHistoryField(field) {
+    _phistField = field;
+    _renderHistoryToolbar();
+    _renderHistoryEntries();
+  }
+
+  function _renderHistoryToolbar() {
+    const fields = ['all', 'username', 'display_name', 'bio', 'avatar'];
+    const pills  = fields.map(f => {
+      const active = _phistField === f ? ' active' : '';
+      return `<button class="filter-pill${active}" onclick="setHistoryField('${f}')">${_PHIST_FIELD_LABELS[f]}</button>`;
+    }).join('');
+    document.getElementById('modalToolbar').innerHTML =
+      `<div class="filter-pills">${pills}</div>`
+      + `<button class="filter-pill" style="margin-left:auto" onclick="_closeProfileHistory()">← Videos</button>`;
+  }
+
+  function _renderHistoryEntries() {
+    const panel   = document.getElementById('phistPanel');
+    const entries = _phistField === 'all'
+      ? _phistData
+      : _phistData.filter(e => e.field === _phistField);
+
+    if (!entries.length) {
+      panel.innerHTML = '<div class="phist-empty">No history recorded for this field yet.</div>';
+      return;
+    }
+
+    panel.innerHTML = entries.map(e => {
+      const dateStr = new Date(e.changed_at * 1000)
+        .toLocaleString('en-GB', { day: 'numeric', month: 'short', year: 'numeric',
+                                   hour: '2-digit', minute: '2-digit' });
+      const fieldLabel = _PHIST_FIELD_LABELS[e.field] || e.field;
+
+      if (e.field === 'avatar') {
+        const src = `/api/users/${encodeURIComponent(_phistUserId)}/avatar-history/${encodeURIComponent(e.old_value)}`;
+        return `<div class="phist-entry">
+          <img class="phist-avatar-thumb" src="${src}" alt=""
+               onerror="this.style.visibility='hidden';this.style.cursor='default';this.onclick=null"
+               onclick="openImgModalUrl('${src}')">
+          <div class="phist-text">
+            <div class="phist-date">${fieldLabel} · Changed ${dateStr}</div>
+          </div>
+        </div>`;
+      }
+
+      const valueHtml = e.old_value
+        ? `<div class="phist-value">${esc(e.old_value)}</div>`
+        : `<div class="phist-value empty">(empty)</div>`;
+      return `<div class="phist-entry">
+        <div class="phist-text">
+          <div class="phist-date">${fieldLabel} · Changed ${dateStr}</div>
+          ${valueHtml}
+        </div>
+      </div>`;
+    }).join('');
   }
 
   function _renderColumnHdrs() {
@@ -1785,6 +2110,7 @@
     batch.forEach(v => {
       const row = document.createElement('div');
       row.className = 'video-row vcols';
+      row.dataset.videoId = v.video_id;
       const statusLabel = v.status === 'deleted' ? 'Deleted'
                         : v.status === 'undeleted' ? 'Restored' : 'Active';
       row.innerHTML = `
@@ -1886,11 +2212,13 @@
   loadStatus();
   loadQueue();
   loadStats();
+  loadRecent();
   setInterval(loadCookies, 30000);
   setInterval(loadUsers,   15000);
   setInterval(loadStatus,   5000);
   setInterval(loadQueue,    3000);
   setInterval(loadStats,   60000);
+  setInterval(loadRecent,  30000);
 
   // Resume backfill poll if it was running before page load
   (async () => {

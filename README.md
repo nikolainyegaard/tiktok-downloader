@@ -12,7 +12,7 @@ A background loop runs on a fixed interval (default: 30 minutes, recommended: 3 
 
 1. Loads all tracked users from the database
 2. For each user:
-   - Fetches their profile info via TikTokApi (Playwright/Chromium) and detects username changes
+   - Fetches their profile info via TikTokApi (Playwright/Chromium) and detects profile changes (username, display name, bio, avatar)
    - Fetches their full public video list via yt-dlp — no browser session needed
    - Compares it against the database
    - Downloads any new videos via yt-dlp, embedding metadata into the file; photo posts are downloaded as individual `.jpg` images
@@ -97,7 +97,9 @@ To process a single user immediately, click the **Run** button on their card. Mu
 
 Use the **Sort** dropdown and direction toggle in the Tracked users header to order cards by username, display name, followers, saved/deleted video counts, or date added.
 
-Click anywhere on a user card (other than the Run/Remove buttons) to open a detail view showing their full profile info and a complete, sortable, filterable list of all their downloaded videos with thumbnails. From the video list:
+Use the filter buttons (Public/Private, Active/Banned) next to the sort control to narrow the user list.
+
+Click anywhere on a user card (other than the Run/Remove buttons) to open a detail view showing their full profile info, profile change history, and a complete, sortable, filterable list of all their downloaded videos with thumbnails. From the video list:
 
 - **Click a thumbnail** to preview the image full-size in an overlay.
 - **Click the ▶ button** (video posts only) to play the video directly in the browser.
@@ -188,7 +190,8 @@ All configuration is via environment variables in `docker-compose.yml`.
   tiktok.db        # SQLite database (users, videos, username history)
   cookies.txt      # TikTok session cookies (uploaded via UI)
   avatars/
-    {tiktok_id}.jpg  # Cached profile pictures, refreshed each loop run
+    {tiktok_id}.jpg           # Current cached profile picture, refreshed each loop run
+    {tiktok_id}_{ts}.jpg      # Archived previous avatars (created on change detection)
   logs/
     transcript.log   # Daily-rotating full output log
 
@@ -209,7 +212,7 @@ On first startup, a background thread scans all existing video files and generat
 
 **Users:** TikTok ID, current username, display name, bio, follower/following/video counts, join date, verified status, account status (active / banned), date added, date last checked. The full raw API response is stored as a JSON blob for future use.
 
-**Username history:** Every username change is recorded with a timestamp, so you always know what an account used to be called.
+**Profile history:** Every change to a user's username, display name, bio, or avatar is recorded with a timestamp. Visible in the Profile History tab of the user detail panel.
 
 **Videos:** Video ID, type (video or photo carousel), description, upload date, download date, file path, status (`up` / `deleted` / `undeleted`), engagement stats (views, likes, comments, shares, saves), dimensions (width, height, duration), music info (title and artist), and the full raw TikTok page data + yt-dlp metadata as JSON blobs. Stats are captured at download time from the TikTok page — use **Backfill Stats** in the UI to populate these for videos downloaded before v1.5.0.
 
