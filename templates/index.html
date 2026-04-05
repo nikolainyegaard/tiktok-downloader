@@ -143,6 +143,18 @@
 
     .cookie-meta { font-size: 12px; color: var(--text-dim); }
 
+    /* ── Sounds panel ────────────────────────────────────────────────────────── */
+    .sound-icon-wrap {
+      width: 48px; height: 48px; border-radius: 50%; flex-shrink: 0;
+      background: rgba(79,142,247,.15);
+      display: flex; align-items: center; justify-content: center;
+    }
+    .sound-icon-letter { font-size: 22px; color: var(--accent); pointer-events: none; user-select: none; }
+    .sound-add-form {
+      display: flex; gap: 8px; flex-wrap: wrap; align-items: center;
+    }
+    .sound-add-form input { flex: 1; min-width: 180px; }
+
     .cookie-upload-label {
       display: inline-flex;
       align-items: center;
@@ -510,6 +522,13 @@
       gap: 10px;
       align-items: center;
     }
+    /* Sound modal: extra Author column after Description */
+    .sound-vcols {
+      display: grid;
+      grid-template-columns: 90px minmax(120px,1fr) 110px 76px 70px 130px 130px 130px 32px;
+      gap: 10px;
+      align-items: center;
+    }
 
     .video-list-hdr {
       padding: 5px 16px 4px;
@@ -530,8 +549,20 @@
     .col-hdr.sort-asc::after  { content: ' ↑'; }
     .col-hdr.sort-desc { color: var(--accent); }
     .col-hdr.sort-desc::after { content: ' ↓'; }
-    /* Centre all data columns except thumb+desc */
-    .col-hdr:nth-child(n+3) { text-align: center; }
+    /* Centre all data columns except thumb+desc (and author in sound-vcols) */
+    .vcols       .col-hdr:nth-child(n+3) { text-align: center; }
+    .sound-vcols .col-hdr:nth-child(n+4) { text-align: center; }
+    .author-chip {
+      display: inline-block; max-width: 100%;
+      font-size: 11px; font-weight: 600;
+      padding: 2px 7px; border-radius: 99px;
+      background: rgba(79,142,247,.15); color: var(--accent);
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+      cursor: pointer; text-decoration: none;
+      transition: background .1s;
+    }
+    .author-chip:hover { background: rgba(79,142,247,.28); }
+    .author-chip.untracked { background: var(--surface2); color: var(--muted); cursor: default; }
 
     .modal-video-list { flex: 1; overflow-y: auto; }
 
@@ -1062,6 +1093,27 @@
     <div class="pending-list" id="pendingList"></div>
   </section>
 
+  <!-- Sounds -->
+  <section>
+    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:10px;">
+      <div class="section-title" style="margin-bottom:0">Tracked sounds (<span id="soundCount">0</span>)</div>
+      <button class="btn-run" style="font-size:12px;padding:4px 12px" onclick="toggleSoundAddForm()">+ Add sound</button>
+    </div>
+    <div id="soundsAddForm" style="display:none;margin-bottom:12px;">
+      <div class="sound-add-form">
+        <input type="text" id="soundInput" placeholder="Sound ID or TikTok sound URL"
+               style="font-size:13px;padding:5px 10px;background:var(--surface);border:1px solid var(--border);border-radius:6px;color:var(--text);">
+        <input type="text" id="soundLabelInput" placeholder="Label (optional)"
+               style="flex:0 0 160px;font-size:13px;padding:5px 10px;background:var(--surface);border:1px solid var(--border);border-radius:6px;color:var(--text);">
+        <button class="btn-primary" onclick="addSound()" style="font-size:12px;padding:5px 14px;">Add</button>
+      </div>
+      <div id="soundAddStatus" style="font-size:12px;color:var(--muted);margin-top:6px;min-height:16px;"></div>
+    </div>
+    <div class="users-grid" id="soundsGrid">
+      <div class="empty-state">No sounds tracked yet.</div>
+    </div>
+  </section>
+
   <!-- User list -->
   <section>
     <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:12px;">
@@ -1188,6 +1240,16 @@
           <span id="backfillStatus" style="font-size:12px;color:var(--muted)"></span>
         </div>
         <div id="failedList" style="display:none;font-size:11px;color:var(--muted);line-height:1.7"></div>
+
+        <hr style="border:none;border-top:1px solid var(--border);margin:18px 0;">
+        <div class="settings-section-title" style="font-size:12px;margin-bottom:8px;">Re-backfill all videos</div>
+        <p style="font-size:12px;color:var(--text-dim);line-height:1.5;margin-bottom:12px;">
+          Marks every video as needing a stats backfill. Use this after adding new tracked columns — the next Run Backfill will re-fetch all ~8 000 videos.
+        </p>
+        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+          <button class="btn-danger" id="resetBackfillBtn" onclick="resetBackfillStep()">Reset all backfill status</button>
+          <span id="resetBackfillStatus" style="font-size:12px;color:var(--muted)"></span>
+        </div>
       </div>
 
       <!-- Database section -->
@@ -1282,6 +1344,17 @@
     <div class="phist-panel"    id="phistPanel" style="display:none"></div>
     <div class="video-list-hdr" id="videoListHdr"></div>
     <div class="modal-video-list" id="modalVideoList"></div>
+  </div>
+</div>
+
+<!-- Sound detail modal -->
+<div id="soundModalBackdrop" class="modal-backdrop" style="display:none" onclick="if(event.target===this)closeSoundModal()">
+  <div class="modal">
+    <button class="modal-close" onclick="closeSoundModal()">✕</button>
+    <div class="modal-header"   id="soundModalHeader"></div>
+    <div class="modal-toolbar"  id="soundModalToolbar"></div>
+    <div class="video-list-hdr" id="soundVideoListHdr"></div>
+    <div class="modal-video-list" id="soundModalVideoList"></div>
   </div>
 </div>
 
@@ -1991,15 +2064,414 @@
     if (ok) { users = data; renderUsers(); }
   }
 
+  // ── Sounds ────────────────────────────────────────────────────────────────────
+
+  let sounds        = [];
+  let soundRunCurrent = null;
+  let soundRunQueue   = [];
+
+  function renderSounds() {
+    const grid    = document.getElementById('soundsGrid');
+    const countEl = document.getElementById('soundCount');
+    countEl.textContent = sounds.length;
+    if (!sounds.length) {
+      grid.innerHTML = '<div class="empty-state">No sounds tracked yet.</div>';
+      return;
+    }
+    grid.innerHTML = sounds.map(s => {
+      const label    = s.label || s.sound_id;
+      const ttUrl    = `https://www.tiktok.com/music/-${s.sound_id}`;
+      const checked  = s.last_checked
+        ? `Last checked ${fmt.rel(new Date(s.last_checked * 1000).toISOString())}`
+        : 'Never checked';
+      const inQueue   = soundRunQueue.includes(s.sound_id);
+      const isCurrent = soundRunCurrent === s.sound_id;
+      const runLabel  = isCurrent ? 'Running…' : inQueue ? 'Queued' : 'Run';
+      const runDis    = (inQueue || isCurrent) ? 'disabled' : '';
+      return `
+        <div class="user-card" onclick="if(!event.target.closest('button,a'))openSoundModal('${esc(s.sound_id)}')" role="button" tabindex="0">
+          <div class="user-card-top">
+            <div class="sound-icon-wrap"><span class="sound-icon-letter">♫</span></div>
+            <div class="user-identity">
+              <div class="user-display-name">${esc(label)}</div>
+              <div class="user-handle">
+                <a href="${esc(ttUrl)}" target="_blank" rel="noopener"
+                   onclick="event.stopPropagation()" style="color:var(--accent);text-decoration:none"
+                   onmouseover="this.style.textDecoration='underline'" onmouseout="this.style.textDecoration='none'"
+                >${esc(s.sound_id)}</a>
+              </div>
+            </div>
+          </div>
+          <div class="user-bio-area"></div>
+          <div class="user-stats">
+            <span class="stat-item"><span class="stat-item-label">saved</span><span class="stat-item-value">${s.video_count || 0}</span></span>
+            ${s.video_deleted   ? `<span class="stat-item"><span class="stat-item-label">deleted</span><span class="stat-item-value" style="color:var(--red)">${s.video_deleted}</span></span>` : ''}
+            ${s.video_undeleted ? `<span class="stat-item"><span class="stat-item-label">restored</span><span class="stat-item-value" style="color:var(--yellow)">${s.video_undeleted}</span></span>` : ''}
+          </div>
+          <div class="user-card-footer">
+            <span class="user-checked">${checked}</span>
+            <div style="display:flex;gap:6px;">
+              <button class="btn-run" ${runDis} onclick="event.stopPropagation();runSound('${esc(s.sound_id)}')">${runLabel}</button>
+              <button class="btn-danger" onclick="event.stopPropagation();removeSound('${esc(s.sound_id)}','${esc(label)}')">Remove</button>
+            </div>
+          </div>
+        </div>`;
+    }).join('');
+  }
+
+  async function loadSounds() {
+    const { ok, data } = await apiJSON('/api/sounds');
+    if (ok) { sounds = data; renderSounds(); }
+  }
+
+  function toggleSoundAddForm() {
+    const form = document.getElementById('soundsAddForm');
+    const visible = form.style.display !== 'none';
+    form.style.display = visible ? 'none' : '';
+    if (!visible) document.getElementById('soundInput').focus();
+  }
+
+  async function addSound() {
+    const input      = document.getElementById('soundInput');
+    const labelInput = document.getElementById('soundLabelInput');
+    const statusEl   = document.getElementById('soundAddStatus');
+    const raw        = input.value.trim();
+    const label      = labelInput.value.trim() || null;
+    if (!raw) { statusEl.textContent = 'Enter a sound ID or URL.'; return; }
+
+    statusEl.textContent = 'Adding…';
+    statusEl.style.color = 'var(--muted)';
+    const { ok, data } = await apiJSON('/api/sounds', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ sound_id: raw, label }),
+    });
+    if (!ok) {
+      statusEl.textContent = data.error || 'Failed.';
+      statusEl.style.color = 'var(--red)';
+    } else {
+      input.value      = '';
+      labelInput.value = '';
+      statusEl.textContent = `Sound ${data.sound_id} added.`;
+      statusEl.style.color = 'var(--green)';
+      setTimeout(() => { statusEl.textContent = ''; }, 5000);
+      loadSounds();
+    }
+  }
+
+  async function removeSound(soundId, label) {
+    if (!confirm(`Remove sound "${label}" (${soundId})?\n\nVideos already downloaded will not be deleted.`)) return;
+    const { ok, data } = await apiJSON(`/api/sounds/${encodeURIComponent(soundId)}`, { method: 'DELETE' });
+    if (!ok) { alert(data.error || 'Failed to remove sound.'); return; }
+    if (_soundModalId === soundId) closeSoundModal();
+    loadSounds();
+  }
+
+  async function runSound(soundId) {
+    const { ok, data } = await apiJSON(`/api/sounds/${encodeURIComponent(soundId)}/run`, { method: 'POST' });
+    if (!ok) { alert(data.error || 'Could not start sound run.'); return; }
+    soundRunQueue = [...soundRunQueue, soundId];
+    renderSounds();
+  }
+
+  document.getElementById('soundInput')?.addEventListener('keydown', e => {
+    if (e.key === 'Enter') addSound();
+  });
+
+  // ── Sound modal ────────────────────────────────────────────────────────────────
+
+  let _soundModalId      = null;
+  let _soundModal        = null;
+  let _soundModalVideos  = [];
+  let _soundModalFilter  = 'all';
+  let _soundModalTypeFilter = 'all';
+  let _soundModalSort    = { field: 'upload_date', dir: 'desc' };
+  let _soundModalLoaded  = 0;
+  let _soundModalObs     = null;
+  const SOUND_MODAL_PAGE = 50;
+
+  function openSoundModal(soundId) {
+    const s = sounds.find(s => s.sound_id === soundId);
+    if (!s) return;
+    _soundModalId      = soundId;
+    _soundModal        = s;
+    _soundModalVideos  = [];
+    _soundModalFilter  = 'all';
+    _soundModalTypeFilter = 'all';
+    _soundModalSort    = { field: 'upload_date', dir: 'desc' };
+    _soundModalLoaded  = 0;
+    if (_soundModalObs) { _soundModalObs.disconnect(); _soundModalObs = null; }
+
+    document.getElementById('soundModalBackdrop').style.display = 'flex';
+    document.body.style.overflow = 'hidden';
+
+    _renderSoundModalHeader(s);
+    _renderSoundModalToolbar([]);
+    _renderSoundColumnHdrs();
+    document.getElementById('soundModalVideoList').innerHTML =
+      '<div class="vlist-loading">Loading videos…</div>';
+
+    _loadSoundModalVideos(soundId);
+  }
+
+  function closeSoundModal() {
+    document.getElementById('soundModalBackdrop').style.display = 'none';
+    document.body.style.overflow = '';
+    if (_soundModalObs) { _soundModalObs.disconnect(); _soundModalObs = null; }
+    _soundModalId     = null;
+    _soundModal       = null;
+    _soundModalVideos = [];
+  }
+
+  function _renderSoundModalHeader(s) {
+    const label  = s.label || s.sound_id;
+    const ttUrl  = `https://www.tiktok.com/music/-${esc(s.sound_id)}`;
+    const checked = s.last_checked
+      ? 'Last checked ' + fmt.rel(new Date(s.last_checked * 1000).toISOString())
+      : 'Never checked';
+    document.getElementById('soundModalHeader').innerHTML = `
+      <div class="modal-avatar-wrap">
+        <div class="sound-icon-wrap" style="width:56px;height:56px">
+          <span class="sound-icon-letter" style="font-size:26px">♫</span>
+        </div>
+      </div>
+      <div class="modal-user-body">
+        <div class="modal-name-row">
+          <span class="modal-name">${esc(label)}</span>
+          <button class="btn-ghost" style="font-size:11px;padding:3px 8px;margin-left:4px"
+            onclick="editSoundLabel('${esc(s.sound_id)}')">Edit label</button>
+        </div>
+        <div class="modal-handle">
+          <a href="${ttUrl}" target="_blank" rel="noopener"
+             style="color:var(--accent);text-decoration:none"
+             onmouseover="this.style.textDecoration='underline'" onmouseout="this.style.textDecoration='none'"
+          >${esc(s.sound_id)}</a>
+        </div>
+        <div class="modal-stats-row">
+          <span><strong>${s.video_count || 0}</strong> saved locally</span>
+          ${s.video_deleted   ? `<span style="color:var(--red)"><strong>${s.video_deleted}</strong> deleted</span>` : ''}
+          ${s.video_undeleted ? `<span style="color:var(--yellow)"><strong>${s.video_undeleted}</strong> restored</span>` : ''}
+          <span style="color:var(--muted)">${esc(checked)}</span>
+        </div>
+      </div>
+    `;
+  }
+
+  function _soundFilteredSorted() {
+    let vids = _soundModalVideos;
+    if (_soundModalFilter === 'active')    vids = vids.filter(v => v.status === 'up');
+    if (_soundModalFilter === 'deleted')   vids = vids.filter(v => v.status === 'deleted');
+    if (_soundModalFilter === 'restored')  vids = vids.filter(v => v.status === 'undeleted');
+    if (_soundModalTypeFilter === 'video') vids = vids.filter(v => v.type === 'video');
+    if (_soundModalTypeFilter === 'photo') vids = vids.filter(v => v.type === 'photo');
+    const { field, dir } = _soundModalSort;
+    return [...vids].sort((a, b) => {
+      const av = a[field] ?? (dir === 'asc' ? Infinity : -Infinity);
+      const bv = b[field] ?? (dir === 'asc' ? Infinity : -Infinity);
+      return dir === 'asc' ? (av < bv ? -1 : av > bv ? 1 : 0)
+                           : (av > bv ? -1 : av < bv ? 1 : 0);
+    });
+  }
+
+  function _renderSoundModalToolbar(vids) {
+    const counts = {
+      all:      vids.length,
+      active:   vids.filter(v => v.status === 'up').length,
+      deleted:  vids.filter(v => v.status === 'deleted').length,
+      restored: vids.filter(v => v.status === 'undeleted').length,
+    };
+    const typeCounts = {
+      video: vids.filter(v => v.type === 'video').length,
+      photo: vids.filter(v => v.type === 'photo').length,
+    };
+    const hasMultipleTypes = typeCounts.video > 0 && typeCounts.photo > 0;
+
+    const pill = (key, label) => {
+      const active = _soundModalFilter === key ? ' active' : '';
+      const n      = counts[key];
+      return `<button class="filter-pill${active}" onclick="setSoundModalFilter('${key}')">`
+           + `${label}${n ? ` <span style="opacity:.65">(${n})</span>` : ''}</button>`;
+    };
+    const typePill = (key, label) => {
+      const active = _soundModalTypeFilter === key ? ' active' : '';
+      return `<button class="filter-pill${active}" onclick="setSoundModalTypeFilter('${key}')">${label}</button>`;
+    };
+
+    const shown  = _soundFilteredSorted().length;
+    const label  = shown === 1 ? '1 post' : `${shown.toLocaleString()} posts`;
+    document.getElementById('soundModalToolbar').innerHTML =
+      `<div style="display:flex;flex-direction:column;gap:4px">`
+      + `<div class="filter-pills">`
+      + pill('all', 'All')
+      + pill('active', 'Active')
+      + (counts.deleted  ? pill('deleted',  'Deleted')  : '')
+      + (counts.restored ? pill('restored', 'Restored') : '')
+      + `</div>`
+      + (hasMultipleTypes
+          ? `<div class="filter-pills">`
+            + typePill('all',   'All types')
+            + typePill('video', `Videos (${typeCounts.video.toLocaleString()})`)
+            + typePill('photo', `Photos (${typeCounts.photo.toLocaleString()})`)
+            + `</div>`
+          : '')
+      + `</div>`
+      + `<span class="modal-vid-count">${label}</span>`;
+  }
+
+  function setSoundModalFilter(filter) {
+    _soundModalFilter = filter;
+    _renderSoundModalToolbar(_soundModalVideos);
+    _renderSoundModalVideoList();
+  }
+
+  function setSoundModalTypeFilter(type) {
+    _soundModalTypeFilter = type;
+    _renderSoundModalToolbar(_soundModalVideos);
+    _renderSoundModalVideoList();
+  }
+
+  const SOUND_VCOLS = [
+    { field: null,          label: '' },
+    { field: null,          label: 'Description' },
+    { field: null,          label: 'Author' },
+    { field: 'status',      label: 'Status' },
+    { field: 'view_count',  label: 'Views' },
+    { field: 'upload_date', label: 'Uploaded' },
+    { field: 'download_date', label: 'Downloaded' },
+    { field: 'deleted_at',  label: 'Deleted' },
+    { field: null,          label: '' },
+  ];
+
+  function _renderSoundColumnHdrs() {
+    document.getElementById('soundVideoListHdr').innerHTML =
+      '<div class="sound-vcols">'
+      + SOUND_VCOLS.map(col => {
+          if (!col.field) return `<div class="col-hdr">${col.label}</div>`;
+          const isSorted = _soundModalSort.field === col.field;
+          const cls = isSorted ? ` sort-${_soundModalSort.dir}` : '';
+          return `<div class="col-hdr sortable${cls}" onclick="setSoundModalSort('${col.field}')">${col.label}</div>`;
+        }).join('')
+      + '</div>';
+  }
+
+  function setSoundModalSort(field) {
+    if (_soundModalSort.field === field) {
+      _soundModalSort.dir = _soundModalSort.dir === 'asc' ? 'desc' : 'asc';
+    } else {
+      _soundModalSort = { field, dir: 'desc' };
+    }
+    _renderSoundColumnHdrs();
+    _renderSoundModalVideoList();
+  }
+
+  function _renderSoundModalVideoList() {
+    _soundModalLoaded = 0;
+    if (_soundModalObs) { _soundModalObs.disconnect(); _soundModalObs = null; }
+    const list = document.getElementById('soundModalVideoList');
+    list.innerHTML = '';
+    list.scrollTop = 0;
+    const vids = _soundFilteredSorted();
+    if (!vids.length) {
+      list.innerHTML = '<div class="vlist-empty">No videos match this filter.</div>';
+      return;
+    }
+    _appendSoundModalVideos(vids);
+  }
+
+  function _appendSoundModalVideos(vids) {
+    const list  = document.getElementById('soundModalVideoList');
+    const batch = vids.slice(_soundModalLoaded, _soundModalLoaded + SOUND_MODAL_PAGE);
+    _soundModalLoaded += batch.length;
+
+    batch.forEach(v => {
+      const row = document.createElement('div');
+      row.className = 'video-row sound-vcols';
+      row.dataset.videoId = v.video_id;
+      const statusLabel = v.status === 'deleted' ? 'Deleted'
+                        : v.status === 'undeleted' ? 'Restored' : 'Active';
+
+      const authorName  = v.author_username || v.tiktok_id || '?';
+      const isTracked   = v.author_enabled === 1;
+      const authorChip  = isTracked
+        ? `<span class="author-chip" onclick="event.stopPropagation();closeSoundModal();openUserModal('${esc(v.tiktok_id)}')">@${esc(authorName)}</span>`
+        : `<span class="author-chip untracked">@${esc(authorName)}</span>`;
+
+      row.innerHTML = `
+        <img class="video-thumb" src="/api/videos/${esc(v.video_id)}/thumbnail" alt=""
+             onerror="this.style.opacity='.15'"
+             onclick="event.stopPropagation();openImgModal('${esc(v.video_id)}')">
+        <div>${v.description
+          ? `<div class="video-desc">${esc(v.description)}</div>`
+          : `<div class="video-desc-empty">(no description)</div>`}</div>
+        <div class="video-cell">${authorChip}</div>
+        <div class="video-cell">
+          <span class="vstatus ${v.status}">${statusLabel}</span>
+        </div>
+        <div class="video-cell">${fmtCount(v.view_count)}</div>
+        <div class="video-cell">${fmtDateShort(v.upload_date)}</div>
+        <div class="video-cell">${fmtDateShort(v.download_date)}</div>
+        <div class="video-cell">${fmtDateShort(v.deleted_at)}</div>
+        <div class="video-cell" style="padding:0">
+          ${v.type === 'video'
+            ? `<button class="play-btn" onclick="event.stopPropagation();openVidModal('${esc(v.video_id)}')" title="Play video">▶</button>`
+            : v.type === 'photo'
+            ? `<button class="play-btn" onclick="event.stopPropagation();openCarousel('${esc(v.video_id)}')" title="View photos"><svg width="13" height="13" viewBox="0 0 13 13" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x=".75" y=".75" width="4.5" height="4.5" rx=".75"/><rect x="7.75" y=".75" width="4.5" height="4.5" rx=".75"/><rect x=".75" y="7.75" width="4.5" height="4.5" rx=".75"/><rect x="7.75" y="7.75" width="4.5" height="4.5" rx=".75"/></svg></button>`
+            : ''
+          }
+        </div>
+      `;
+      list.appendChild(row);
+    });
+
+    if (_soundModalLoaded < vids.length) {
+      const sentinel = document.createElement('div');
+      sentinel.style.height = '1px';
+      list.appendChild(sentinel);
+      _soundModalObs = new IntersectionObserver(entries => {
+        if (!entries[0].isIntersecting) return;
+        _soundModalObs.disconnect(); _soundModalObs = null;
+        _appendSoundModalVideos(vids);
+      }, { root: list, rootMargin: '300px' });
+      _soundModalObs.observe(sentinel);
+    }
+  }
+
+  async function _loadSoundModalVideos(soundId) {
+    const { ok, data } = await apiJSON(`/api/sounds/${encodeURIComponent(soundId)}/videos`);
+    if (!ok || _soundModalId !== soundId) return;
+    _soundModalVideos = data;
+    _renderSoundModalToolbar(data);
+    _renderSoundModalVideoList();
+  }
+
+  async function editSoundLabel(soundId) {
+    const s = sounds.find(s => s.sound_id === soundId);
+    const newLabel = prompt('Edit label for this sound:', s?.label || '');
+    if (newLabel === null) return;
+    const { ok, data } = await apiJSON(`/api/sounds/${encodeURIComponent(soundId)}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ label: newLabel.trim() || null }),
+    });
+    if (!ok) { alert(data.error || 'Failed to update label.'); return; }
+    await loadSounds();
+    if (_soundModalId === soundId) {
+      _soundModal = sounds.find(s => s.sound_id === soundId);
+      if (_soundModal) _renderSoundModalHeader(_soundModal);
+    }
+  }
+
   // ── Loop ──────────────────────────────────────────────────────────────────────
 
   function renderStatus(state) {
     isRunning   = state.running;
     currentUser = state.current_user;
-    runQueue    = state.run_queue    || [];
-    runCurrent  = state.run_current  || null;
+    runQueue         = state.run_queue         || [];
+    runCurrent       = state.run_current       || null;
+    soundRunQueue    = state.sound_run_queue   || [];
+    soundRunCurrent  = state.sound_run_current || null;
 
-    const anyActive = isRunning || !!runCurrent;
+    const anyActive = isRunning || !!runCurrent || !!soundRunCurrent;
     const badge = document.getElementById('statusBadge');
     const text  = document.getElementById('statusText');
     badge.className = `status-badge${anyActive ? ' running' : ''}`;
@@ -2082,6 +2554,7 @@
       renderStatus(data);
       renderLogs(data.logs);
       renderUsers();
+      renderSounds();
     }
   }
 
@@ -2194,6 +2667,9 @@
     }
     if (document.getElementById('recentLogBackdrop').style.display !== 'none') {
       closeRecentLog(); return;
+    }
+    if (document.getElementById('soundModalBackdrop').style.display !== 'none') {
+      closeSoundModal(); return;
     }
     if (document.getElementById('modalBackdrop').style.display !== 'none') {
       closeModal(); return;
@@ -2410,16 +2886,19 @@
     const shown = _filteredSorted().length;
     const label = shown === 1 ? '1 post' : `${shown.toLocaleString()} posts`;
     document.getElementById('modalToolbar').innerHTML =
-      `<div class="filter-pills">`
+      `<div style="display:flex;flex-direction:column;gap:4px">`
+      + `<div class="filter-pills">`
       + pill('all', 'All')
       + pill('active', 'Active')
       + (counts.deleted  ? pill('deleted',  'Deleted')  : '')
       + (counts.restored ? pill('restored', 'Restored') : '')
+      + `</div>`
       + (hasMultipleTypes
-          ? `</div><div class="filter-pills" style="margin-top:4px">`
+          ? `<div class="filter-pills">`
             + typePill('all',   'All types')
             + typePill('video', `Videos (${typeCounts.video.toLocaleString()})`)
             + typePill('photo', `Photos (${typeCounts.photo.toLocaleString()})`)
+            + `</div>`
           : '')
       + `</div>`
       + `<span class="modal-vid-count">${label}</span>`
@@ -2710,16 +3189,64 @@
 
   loadCookies();
   loadUsers();
+  loadSounds();
   loadStatus();
   loadQueue();
   loadStats();
   loadRecent();
   setInterval(loadCookies, 30000);
   setInterval(loadUsers,   15000);
+  setInterval(loadSounds,  60000);
   setInterval(loadStatus,   5000);
   setInterval(loadQueue,    3000);
   setInterval(loadStats,   60000);
   setInterval(loadRecent,  30000);
+
+  // Reset backfill — two-step confirmation
+  let _resetBackfillConfirming = false;
+  let _resetBackfillTimer = null;
+
+  function resetBackfillStep() {
+    const btn = document.getElementById('resetBackfillBtn');
+    const statusEl = document.getElementById('resetBackfillStatus');
+
+    if (!_resetBackfillConfirming) {
+      // First click — enter confirm state
+      _resetBackfillConfirming = true;
+      btn.textContent = 'Click again to confirm';
+      btn.style.background = 'rgba(224,82,82,.15)';
+      statusEl.textContent = 'This will queue all videos for re-backfill.';
+      statusEl.style.color = 'var(--red)';
+      // Auto-cancel after 5 s
+      _resetBackfillTimer = setTimeout(() => {
+        _resetBackfillConfirming = false;
+        btn.textContent = 'Reset all backfill status';
+        btn.style.background = '';
+        statusEl.textContent = '';
+      }, 5000);
+    } else {
+      // Second click — execute
+      clearTimeout(_resetBackfillTimer);
+      _resetBackfillConfirming = false;
+      btn.disabled = true;
+      btn.textContent = 'Reset all backfill status';
+      btn.style.background = '';
+      statusEl.textContent = 'Resetting…';
+      statusEl.style.color = 'var(--muted)';
+
+      apiJSON('/api/backfill/reset', { method: 'POST' }).then(({ ok, data }) => {
+        btn.disabled = false;
+        if (!ok) {
+          statusEl.textContent = data.error || 'Failed.';
+          statusEl.style.color = 'var(--red)';
+        } else {
+          statusEl.textContent = `Done — ${data.reset.toLocaleString()} videos marked for re-backfill.`;
+          statusEl.style.color = 'var(--green)';
+          setTimeout(() => { statusEl.textContent = ''; }, 12000);
+        }
+      });
+    }
+  }
 
   // Resume backfill poll if it was running before page load
   (async () => {

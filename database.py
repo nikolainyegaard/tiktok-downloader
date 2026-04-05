@@ -84,6 +84,26 @@ def init_db():
                 pending_deletion_since  INTEGER,
                 FOREIGN KEY (tiktok_id) REFERENCES users(tiktok_id)
             );
+
+            CREATE TABLE IF NOT EXISTS sounds (
+                sound_id     TEXT PRIMARY KEY,
+                label        TEXT,
+                added_at     INTEGER NOT NULL,
+                last_checked INTEGER,
+                enabled      INTEGER NOT NULL DEFAULT 1
+            );
+
+            CREATE TABLE IF NOT EXISTS sound_videos (
+                sound_id  TEXT NOT NULL,
+                video_id  TEXT NOT NULL,
+                added_at  INTEGER NOT NULL,
+                PRIMARY KEY (sound_id, video_id),
+                FOREIGN KEY (sound_id) REFERENCES sounds(sound_id),
+                FOREIGN KEY (video_id) REFERENCES videos(video_id)
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_sound_videos_sound
+                ON sound_videos(sound_id);
         """)
         _migrate_db(conn)
 
@@ -116,6 +136,7 @@ def _migrate_db(conn):
         "ALTER TABLE videos ADD COLUMN stats_error_count  INTEGER DEFAULT 0",
         "ALTER TABLE videos ADD COLUMN stats_last_error   TEXT",
         "ALTER TABLE users  ADD COLUMN banned_at          INTEGER",
+        "ALTER TABLE videos ADD COLUMN music_id           TEXT",
     ]
     for sql in migrations:
         try:
@@ -134,6 +155,14 @@ def _migrate_db(conn):
           AND view_count    IS NOT NULL
           AND raw_video_data IS NOT NULL
           AND file_path IS NOT NULL
+    """)
+
+    # Backfill music_id from the stored raw JSON blob for any rows that have it
+    conn.execute("""
+        UPDATE videos
+        SET music_id = json_extract(raw_video_data, '$.music.id')
+        WHERE music_id IS NULL
+          AND raw_video_data IS NOT NULL
     """)
 
 
@@ -245,20 +274,20 @@ def add_video(video_id, tiktok_id, video_type, description, upload_date,
               view_count=None, like_count=None, comment_count=None,
               share_count=None, save_count=None,
               duration=None, width=None, height=None,
-              music_title=None, music_artist=None,
+              music_title=None, music_artist=None, music_id=None,
               raw_video_data=None):
     with get_db() as conn:
         conn.execute("""
             INSERT OR IGNORE INTO videos
                 (video_id, tiktok_id, type, description, upload_date,
                  view_count, like_count, comment_count, share_count, save_count,
-                 duration, width, height, music_title, music_artist, raw_video_data,
-                 stats_backfilled_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                 duration, width, height, music_title, music_artist, music_id,
+                 raw_video_data, stats_backfilled_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (video_id, tiktok_id, video_type, description, upload_date,
               view_count, like_count, comment_count, share_count, save_count,
-              duration, width, height, music_title, music_artist, raw_video_data,
-              int(time.time())))
+              duration, width, height, music_title, music_artist, music_id,
+              raw_video_data, int(time.time())))
 
 
 def update_video_downloaded(video_id, file_path, ytdlp_data=None):
@@ -676,6 +705,122 @@ def delete_orphaned_records() -> int:
             "DELETE FROM username_history WHERE tiktok_id NOT IN (SELECT tiktok_id FROM users)"
         ).rowcount
     return videos + history
+
+
+def reset_backfill_status() -> int:
+    """Set stats_backfilled_at = NULL on every video, making all eligible for re-backfill.
+    Returns the number of rows affected."""
+    with get_db() as conn:
+        cur = conn.execute("UPDATE videos SET stats_backfilled_at = NULL")
+        return cur.rowcount
+
+
+# Sound tracking
+
+def add_sound(sound_id: str, label: str | None = None) -> bool:
+    """Add a sound to track. Returns True if newly added, False if already present."""
+    with get_db() as conn:
+        cur = conn.execute(
+            "INSERT OR IGNORE INTO sounds (sound_id, label, added_at) VALUES (?, ?, ?)",
+            (sound_id, label, int(time.time())),
+        )
+        return cur.rowcount > 0
+
+
+def remove_sound(sound_id: str) -> None:
+    with get_db() as conn:
+        conn.execute("DELETE FROM sounds WHERE sound_id = ?", (sound_id,))
+
+
+def get_all_sounds() -> list[dict]:
+    with get_db() as conn:
+        rows = conn.execute("""
+            SELECT s.*,
+                   COUNT(sv.video_id)                                              AS video_count,
+                   SUM(CASE WHEN v.status = 'deleted'   THEN 1 ELSE 0 END)        AS video_deleted,
+                   SUM(CASE WHEN v.status = 'undeleted' THEN 1 ELSE 0 END)        AS video_undeleted
+            FROM sounds s
+            LEFT JOIN sound_videos sv ON sv.sound_id = s.sound_id
+            LEFT JOIN videos v        ON v.video_id  = sv.video_id
+            WHERE s.enabled = 1
+            GROUP BY s.sound_id
+            ORDER BY s.added_at
+        """).fetchall()
+    return [dict(r) for r in rows]
+
+
+def get_sound_videos(sound_id: str) -> list[dict]:
+    """Return all video rows associated with a sound, newest first.
+    Includes author_username from the users table (NULL for untracked authors)."""
+    with get_db() as conn:
+        return [dict(r) for r in conn.execute("""
+            SELECT v.*, u.username AS author_username, u.enabled AS author_enabled
+            FROM videos v
+            JOIN sound_videos sv ON sv.video_id  = v.video_id
+            LEFT JOIN users u    ON u.tiktok_id  = v.tiktok_id
+            WHERE sv.sound_id = ?
+            ORDER BY v.upload_date DESC
+        """, (sound_id,)).fetchall()]
+
+
+def update_sound_label(sound_id: str, label: str | None) -> None:
+    with get_db() as conn:
+        conn.execute(
+            "UPDATE sounds SET label = ? WHERE sound_id = ?",
+            (label, sound_id),
+        )
+
+
+def get_sound(sound_id: str) -> dict | None:
+    with get_db() as conn:
+        row = conn.execute(
+            "SELECT * FROM sounds WHERE sound_id = ?", (sound_id,)
+        ).fetchone()
+    return dict(row) if row else None
+
+
+def update_sound_last_checked(sound_id: str) -> None:
+    with get_db() as conn:
+        conn.execute(
+            "UPDATE sounds SET last_checked = ? WHERE sound_id = ?",
+            (int(time.time()), sound_id),
+        )
+
+
+def add_sound_video(sound_id: str, video_id: str) -> bool:
+    """Link a video to a sound in the junction table. Returns True if newly added."""
+    with get_db() as conn:
+        cur = conn.execute(
+            "INSERT OR IGNORE INTO sound_videos (sound_id, video_id, added_at) VALUES (?, ?, ?)",
+            (sound_id, video_id, int(time.time())),
+        )
+        return cur.rowcount > 0
+
+
+def get_sound_video_ids(sound_id: str) -> set:
+    """Return all known video IDs for a sound (from junction table)."""
+    with get_db() as conn:
+        rows = conn.execute(
+            "SELECT video_id FROM sound_videos WHERE sound_id = ?", (sound_id,)
+        ).fetchall()
+    return {r["video_id"] for r in rows}
+
+
+def ensure_sound_user(tiktok_id: str, username: str,
+                      sec_uid: str | None = None) -> bool:
+    """Ensure a user row exists for a sound-discovered author.
+    Adds with enabled=0 if not present. Returns True if newly inserted."""
+    with get_db() as conn:
+        existing = conn.execute(
+            "SELECT tiktok_id FROM users WHERE tiktok_id = ?", (tiktok_id,)
+        ).fetchone()
+        if existing:
+            return False
+        conn.execute("""
+            INSERT INTO users (tiktok_id, sec_uid, username, added_at, enabled)
+            VALUES (?, ?, ?, ?, 0)
+        """, (tiktok_id, sec_uid, username, int(time.time())))
+        return True
 
 
 def vacuum() -> None:

@@ -79,6 +79,27 @@ def get_user_videos(tiktok_id: str, cookies_path: str | None = None) -> list[dic
     return videos
 
 
+async def fetch_sound_video_ids(sound_id: str, ms_token: str | None,
+                                chrome_executable: str | None) -> list[str]:
+    """Fetch all video IDs that use a given TikTok sound.
+    Returns a list of video ID strings (up to ~3000).
+    Opens its own TikTokApi session.
+    """
+    from TikTokApi import TikTokApi
+
+    video_ids: list[str] = []
+    async with TikTokApi() as api:
+        await api.create_sessions(
+            ms_tokens=[ms_token] if ms_token else [],
+            num_sessions=1,
+            sleep_after=3,
+            executable_path=chrome_executable,
+        )
+        async for video in api.sound(id=sound_id).videos(count=3000):
+            video_ids.append(str(video.id))
+    return video_ids
+
+
 def get_video_details(video_id: str, username: str, cookies: dict) -> dict:
     """Fetch type and image URLs for a single video by parsing the TikTok page HTML.
     Returns {type, description, upload_date, image_urls}.
@@ -120,9 +141,10 @@ def get_video_details(video_id: str, username: str, cookies: dict) -> dict:
     if not item:
         raise RuntimeError("No item data in TikTok page response")
 
-    stats = item.get("stats", {}) or {}
+    stats  = item.get("stats", {}) or {}
     video_meta = item.get("video", {}) or {}
-    music = item.get("music", {}) or {}
+    music  = item.get("music", {}) or {}
+    author = item.get("author", {}) or {}
 
     # Build a cleaned raw blob: strip large/expiring fields
     raw = copy.deepcopy(item)
@@ -142,6 +164,13 @@ def get_video_details(video_id: str, username: str, cookies: dict) -> dict:
         upload_date = None
 
     image_post = item.get("imagePost")
+    _author_info = {
+        "author_id":           author.get("id"),
+        "author_username":     author.get("uniqueId"),
+        "author_sec_uid":      author.get("secUid"),
+        "author_display_name": author.get("nickname"),
+    }
+
     if image_post:
         image_urls = [
             img["imageURL"]["urlList"][0]
@@ -163,7 +192,9 @@ def get_video_details(video_id: str, username: str, cookies: dict) -> dict:
             "height":        None,
             "music_title":   music.get("title"),
             "music_artist":  music.get("authorName"),
+            "music_id":      str(music["id"]) if music.get("id") else None,
             "_raw_video_data": _raw_video_data,
+            **_author_info,
         }
 
     return {
@@ -181,5 +212,7 @@ def get_video_details(video_id: str, username: str, cookies: dict) -> dict:
         "height":        video_meta.get("height"),
         "music_title":   music.get("title"),
         "music_artist":  music.get("authorName"),
+        "music_id":      str(music["id"]) if music.get("id") else None,
         "_raw_video_data": _raw_video_data,
+        **_author_info,
     }

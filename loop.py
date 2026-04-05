@@ -17,6 +17,7 @@ from tiktok_api import get_user_info, get_user_videos, get_video_details
 from downloader import download_video, download_photos, rename_user_folder
 from thumbnailer import backfill_thumbnails, cache_avatar
 import photo_converter as _photo_converter  # noqa: F401 — starts conversion thread on import
+from sound_tracker import process_all_sounds, process_sound
 
 # Shared state
 
@@ -46,6 +47,11 @@ _run_queue:      _queue_module.Queue = _queue_module.Queue()
 _run_state_lock  = threading.Lock()
 _run_state: dict = {"current": None, "queue": []}  # tiktok_ids
 
+# Single-sound run queue
+_sound_run_queue:      _queue_module.Queue = _queue_module.Queue()
+_sound_run_state_lock  = threading.Lock()
+_sound_run_state: dict = {"current": None, "queue": []}  # sound_ids
+
 
 # Public accessors
 
@@ -67,6 +73,9 @@ def get_state_snapshot() -> dict:
     with _run_state_lock:
         state["run_current"] = _run_state["current"]
         state["run_queue"]   = list(_run_state["queue"])
+    with _sound_run_state_lock:
+        state["sound_run_current"] = _sound_run_state["current"]
+        state["sound_run_queue"]   = list(_sound_run_state["queue"])
     return state
 
 
@@ -77,6 +86,16 @@ def enqueue_user_run(tiktok_id: str) -> bool:
             return False
         _run_state["queue"].append(tiktok_id)
     _run_queue.put(tiktok_id)
+    return True
+
+
+def enqueue_sound_run(sound_id: str) -> bool:
+    """Queue a single-sound manual run. Returns False if already queued/running."""
+    with _sound_run_state_lock:
+        if sound_id in _sound_run_state["queue"] or _sound_run_state["current"] == sound_id:
+            return False
+        _sound_run_state["queue"].append(sound_id)
+    _sound_run_queue.put(sound_id)
     return True
 
 
@@ -259,6 +278,7 @@ async def _process_single_user(user: dict, cookies: dict):
                     height=details.get("height"),
                     music_title=details.get("music_title"),
                     music_artist=details.get("music_artist"),
+                    music_id=details.get("music_id"),
                     raw_video_data=details.get("_raw_video_data"),
                 )
                 _log(f"  Saved {vid_id} → {dl_result['file_path']}")
@@ -314,7 +334,29 @@ def _run_worker():
             _run_queue.task_done()
 
 
-threading.Thread(target=_run_worker, daemon=True, name="run-worker").start()
+def _sound_run_worker():
+    while True:
+        sound_id = _sound_run_queue.get()
+        with _sound_run_state_lock:
+            if sound_id in _sound_run_state["queue"]:
+                _sound_run_state["queue"].remove(sound_id)
+            _sound_run_state["current"] = sound_id
+        try:
+            sound = db.get_sound(sound_id)
+            if sound:
+                asyncio.run(process_sound(sound, _log))
+            else:
+                _log(f"Manual sound run: {sound_id} not found in DB")
+        except Exception as e:
+            _log(f"Manual sound run error for {sound_id}: {e}")
+        finally:
+            with _sound_run_state_lock:
+                _sound_run_state["current"] = None
+            _sound_run_queue.task_done()
+
+
+threading.Thread(target=_run_worker,        daemon=True, name="run-worker").start()
+threading.Thread(target=_sound_run_worker,  daemon=True, name="sound-run-worker").start()
 threading.Thread(target=backfill_thumbnails, daemon=True, name="thumb-backfill").start()
 
 
@@ -335,6 +377,11 @@ def run_loop():
             asyncio.run(_process_all_users(users))
         except Exception as e:
             _log(f"Unhandled loop error: {e}")
+
+    try:
+        asyncio.run(process_all_sounds(_log))
+    except Exception as e:
+        _log(f"Unhandled sound tracking error: {e}")
 
     _log("=== Loop complete ===")
     last_run_end = datetime.now(timezone.utc).isoformat()
