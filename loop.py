@@ -46,6 +46,10 @@ _user_state_lock = threading.Lock()
 
 trigger_user_event = threading.Event()
 
+# Set to True when loop interval settings change; cleared by the scheduler thread.
+_user_reschedule_flag  = False
+_user_rflag_lock       = threading.Lock()
+
 # ── Sound loop state ──────────────────────────────────────────────────────────
 
 sound_loop_state = {
@@ -56,6 +60,9 @@ sound_loop_state = {
 _sound_state_lock = threading.Lock()
 
 trigger_sound_event = threading.Event()
+
+_sound_reschedule_flag = False
+_sound_rflag_lock      = threading.Lock()
 
 # ── Single-user run queue ─────────────────────────────────────────────────────
 
@@ -119,6 +126,38 @@ def get_state_snapshot() -> dict:
         state["sound_run_current"] = _sound_run_state["current"]
         state["sound_run_queue"]   = list(_sound_run_state["queue"])
     return state
+
+
+def reschedule_user_loop() -> None:
+    """Wake the user scheduler to re-read its interval from DB without running the loop."""
+    global _user_reschedule_flag
+    with _user_rflag_lock:
+        _user_reschedule_flag = True
+    trigger_user_event.set()
+
+
+def check_and_clear_user_reschedule() -> bool:
+    global _user_reschedule_flag
+    with _user_rflag_lock:
+        val = _user_reschedule_flag
+        _user_reschedule_flag = False
+    return val
+
+
+def reschedule_sound_loop() -> None:
+    """Wake the sound scheduler to re-read its interval from DB without running the loop."""
+    global _sound_reschedule_flag
+    with _sound_rflag_lock:
+        _sound_reschedule_flag = True
+    trigger_sound_event.set()
+
+
+def check_and_clear_sound_reschedule() -> bool:
+    global _sound_reschedule_flag
+    with _sound_rflag_lock:
+        val = _sound_reschedule_flag
+        _sound_reschedule_flag = False
+    return val
 
 
 def enqueue_user_run(tiktok_id: str) -> bool:

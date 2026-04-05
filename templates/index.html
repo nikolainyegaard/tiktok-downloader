@@ -350,9 +350,13 @@
 
     .user-card {
       cursor: pointer;
-      transition: border-color .15s, box-shadow .15s;
+      /* 50ms delay on fade-out so a DOM rebuild that briefly drops hover is invisible */
+      transition: border-color .15s 50ms, box-shadow .15s 50ms;
     }
-    .user-card:hover { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+    .user-card:hover {
+      border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent);
+      transition: border-color .15s, box-shadow .15s; /* hover-in: no delay */
+    }
     .user-card-current:hover { box-shadow: 0 0 0 2px var(--accent); }
 
     /* ── Modal ───────────────────────────────────────────────────────────────── */
@@ -1985,7 +1989,7 @@
       const runDisabled  = (inRunQueue || isRunCurrent) ? 'disabled' : '';
 
       return `
-        <div class="user-card${isCurrent ? ' user-card-current' : ''}" onclick="if(!event.target.closest('button'))openUserModal('${esc(u.tiktok_id)}')" role="button" tabindex="0">
+        <div class="user-card${isCurrent ? ' user-card-current' : ''}" data-userid="${esc(u.tiktok_id)}" onclick="if(!event.target.closest('button'))openUserModal('${esc(u.tiktok_id)}')" role="button" tabindex="0">
           <div class="user-card-top">
             <div class="avatar-wrap">
               <span class="avatar-letter">${esc((u.username||'?')[0])}</span>
@@ -2157,7 +2161,7 @@
       const runLabel  = isCurrent ? 'Running…' : inQueue ? 'Queued' : 'Run';
       const runDis    = (inQueue || isCurrent) ? 'disabled' : '';
       return `
-        <div class="user-card" onclick="if(!event.target.closest('button,a'))openSoundModal('${esc(s.sound_id)}')" role="button" tabindex="0">
+        <div class="user-card" data-soundid="${esc(s.sound_id)}" onclick="if(!event.target.closest('button,a'))openSoundModal('${esc(s.sound_id)}')" role="button" tabindex="0">
           <div class="user-card-top">
             <div class="sound-icon-wrap"><span class="sound-icon-letter">♫</span></div>
             <div class="user-identity">
@@ -2662,13 +2666,36 @@
     if (saved) { saved.style.display = ''; setTimeout(() => saved.style.display = 'none', 2500); }
   }
 
+  function updateRunStates() {
+    // Patch only the dynamic run-state parts of existing cards without rebuilding DOM.
+    document.querySelectorAll('.user-card[data-userid]').forEach(card => {
+      const id      = card.dataset.userid;
+      const inQueue = runQueue.includes(id);
+      const isCur   = runCurrent === id;
+      const uObj    = users.find(u => u.tiktok_id === id);
+      card.classList.toggle('user-card-current', !!(uObj && uObj.username === currentUser));
+      const btn = card.querySelector('.btn-run');
+      if (!btn) return;
+      btn.textContent = isCur ? 'Running…' : inQueue ? 'Queued' : 'Run';
+      btn.disabled    = inQueue || isCur;
+    });
+    document.querySelectorAll('.user-card[data-soundid]').forEach(card => {
+      const id      = card.dataset.soundid;
+      const inQueue = soundRunQueue.includes(id);
+      const isCur   = soundRunCurrent === id;
+      const btn     = card.querySelector('.btn-run');
+      if (!btn) return;
+      btn.textContent = isCur ? 'Running…' : inQueue ? 'Queued' : 'Run';
+      btn.disabled    = inQueue || isCur;
+    });
+  }
+
   async function loadStatus() {
     const { ok, data } = await apiJSON('/api/status');
     if (ok) {
       renderStatus(data);
       renderLogs(data.logs);
-      renderUsers();
-      renderSounds();
+      updateRunStates();
     }
   }
 

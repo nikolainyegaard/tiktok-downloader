@@ -17,7 +17,8 @@ from config import (get_ms_token, get_cookies_flat, cookies_info, COOKIES_PATH, 
 from tiktok_api import get_user_info, get_video_details
 from loop import (is_user_loop_running, is_sound_loop_running, get_state_snapshot,
                   trigger_user_event, trigger_sound_event,
-                  enqueue_user_run, enqueue_sound_run)
+                  enqueue_user_run, enqueue_sound_run,
+                  reschedule_user_loop, reschedule_sound_loop)
 from thumbnailer import thumb_path_for, avatar_path
 import photo_converter as _photo_converter
 
@@ -542,6 +543,10 @@ def create_app() -> Flask:
                 if not isinstance(val, int) or val < 1:
                     return jsonify({"error": f"{key} must be a positive integer"}), 400
                 db.set_setting(key, val)
+        if "user_loop_interval_minutes" in body:
+            reschedule_user_loop()
+        if "sound_loop_interval_minutes" in body:
+            reschedule_sound_loop()
         return jsonify({"ok": True})
 
     # Jobs API

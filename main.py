@@ -13,6 +13,7 @@ from loop import (
     is_user_loop_running, is_sound_loop_running,
     set_user_loop_next_run, set_sound_loop_next_run,
     trigger_user_event, trigger_sound_event,
+    check_and_clear_user_reschedule, check_and_clear_sound_reschedule,
 )
 from web import create_app
 
@@ -68,6 +69,11 @@ def _user_loop_thread():
         remaining = next_at_ts - time.time()
         triggered = trigger_user_event.wait(timeout=max(remaining, 0))
         trigger_user_event.clear()
+
+        if check_and_clear_user_reschedule():
+            print(f"{_ts()} User loop: interval changed, rescheduling.")
+            continue
+
         if triggered:
             print(f"{_ts()} User loop: manual trigger received.")
 
@@ -100,6 +106,11 @@ def _sound_loop_thread():
         remaining = next_at_ts - time.time()
         triggered = trigger_sound_event.wait(timeout=max(remaining, 0))
         trigger_sound_event.clear()
+
+        if check_and_clear_sound_reschedule():
+            print(f"{_ts()} Sound loop: interval changed, rescheduling.")
+            continue
+
         if triggered:
             print(f"{_ts()} Sound loop: manual trigger received.")
 
