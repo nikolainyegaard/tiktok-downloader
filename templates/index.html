@@ -1675,7 +1675,7 @@
 
   let _jobsPoll = null;
 
-  const _PHASE_LABELS = { photos: 'Photo posts…', thumbnails: 'Thumbnails…', avatars: 'Avatars…', counting: 'Counting…' };
+  const _PHASE_LABELS = { startup: 'Checking…', counting: 'Counting…', photos: 'Photo posts…', thumbnails: 'Thumbnails…', avatars: 'Avatars…' };
 
   async function _jobsLoadStatus() {
     const { ok, data } = await apiJSON('/api/jobs/photo-converter/status');
@@ -1687,11 +1687,12 @@
     const countEl = document.getElementById('jobAvifCount');
     const pctEl   = document.getElementById('jobAvifPct');
 
-    btn.disabled = data.running;
+    const isPending = data.phase === 'startup';
+    btn.disabled = data.running || isPending;
 
     const total = data.total || 0;
     const done  = data.done  || 0;
-    const pct   = total > 0 ? Math.round(done / total * 100) : (data.running ? 0 : 100);
+    const pct   = total > 0 ? Math.round(done / total * 100) : (data.running || isPending ? 0 : 100);
 
     barEl.style.width = pct + '%';
 
@@ -1707,12 +1708,13 @@
       countEl.textContent = '';
       pctEl.textContent   = '';
     } else {
-      phaseEl.textContent = total === 0 ? 'All images already in AVIF.' : '';
+      phaseEl.textContent = _PHASE_LABELS[data.phase]
+        || (total === 0 ? 'All images already in AVIF.' : '');
       countEl.textContent = '';
       pctEl.textContent   = '';
     }
 
-    if (!data.running) _stopJobsPoll();
+    if (!data.running && !isPending) _stopJobsPoll();
   }
 
   async function triggerAvifJob() {
