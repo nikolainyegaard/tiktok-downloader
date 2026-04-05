@@ -1,6 +1,6 @@
 # TikTok Downloader
 
-Automatically downloads new videos from a list of TikTok accounts. Tracks deletions and username changes. Stores metadata in the database and embedded in each video file.
+Automatically downloads new videos from a list of TikTok accounts and tracked sounds. Tracks deletions and username changes. Stores metadata in the database and embedded in each video file.
 
 Managed through a web UI. All state lives on the server, so opening it from any device shows the same thing.
 
@@ -21,6 +21,14 @@ A background loop runs on a fixed interval (default: 30 minutes, recommended: 3 
    - Immediately marks any previously-deleted videos or banned accounts as restored/active if they reappear
 
 The first run for an account with many videos will take a while. Subsequent runs are fast.
+
+3. Loads all tracked sounds from the database
+4. For each tracked sound:
+   - Fetches all video IDs that use the sound via TikTokApi (up to 3000 videos)
+   - Compares against already-known videos for that sound
+   - Downloads any new videos not already in the library
+   - For each new video's author, creates an `enabled=0` user row if the account is not already tracked — preserving the data without starting full tracking
+   - Links all known videos (existing and new) to the sound via a junction table
 
 ---
 
@@ -96,6 +104,14 @@ The loop does not run automatically on startup — it waits for the first interv
 To process a single user immediately, click the **Run** button on their card. Multiple users can be queued this way — they run in order, one at a time.
 
 Use the **Sort** dropdown and direction toggle in the Tracked users header to order cards by username, display name, followers, saved/deleted video counts, or date added.
+
+### Tracking sounds
+
+Paste a TikTok sound URL (e.g. `https://www.tiktok.com/music/some-sound-7123456789`) or a raw numeric sound ID into the **Track a sound** field and click **Add**. Optionally give the sound a label to recognise it later.
+
+Each sound card shows its label (or sound ID), a video count, and Run/Remove buttons. Click the card to open the sound detail modal, which shows the same sortable, filterable video list as the user modal — including an **Author** column. Authors who are already tracked users appear as blue clickable chips that open the user modal; authors discovered through sound tracking but not yet actively tracked appear as muted chips.
+
+Click **Edit label** in the sound modal header to rename a sound. Click **Run** on the card or in the modal to trigger an immediate sound run without waiting for the next loop.
 
 Use the filter buttons (Public/Private, Active/Banned) next to the sort control to narrow the user list.
 
@@ -218,7 +234,9 @@ On first startup, a background thread scans all existing video files and generat
 
 **Profile history:** Every change to a user's username, display name, bio, or avatar is recorded with a timestamp. Visible in the Profile History tab of the user detail panel.
 
-**Videos:** Video ID, type (video or photo carousel), description, upload date, download date, file path, status (`up` / `deleted` / `undeleted`), engagement stats (views, likes, comments, shares, saves), dimensions (width, height, duration), music info (title and artist), and the full raw TikTok page data + yt-dlp metadata as JSON blobs. Stats are captured at download time from the TikTok page — use **Backfill Stats** in the UI to populate these for videos downloaded before v1.5.0.
+**Videos:** Video ID, type (video or photo carousel), description, upload date, download date, file path, status (`up` / `deleted` / `undeleted`), engagement stats (views, likes, comments, shares, saves), dimensions (width, height, duration), music info (title, artist, and sound ID), and the full raw TikTok page data + yt-dlp metadata as JSON blobs. Stats are captured at download time from the TikTok page — use **Backfill Stats** in the UI to populate these for videos downloaded before v1.5.0.
+
+**Sounds:** Sound ID, optional label, date added, date last checked. Many-to-many relationship with videos via a junction table.
 
 ### Metadata embedded in video files
 

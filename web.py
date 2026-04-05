@@ -13,7 +13,7 @@ from flask import Flask, jsonify, request, render_template, send_file
 import database as db
 from config import get_ms_token, get_cookies_flat, cookies_info, COOKIES_PATH, COOKIES_TIMESTAMP_PATH, DATA_DIR, VIDEOS_DIR, AVATARS_DIR, CHROME_EXECUTABLE, APP_VERSION
 from tiktok_api import get_user_info, get_video_details
-from loop import is_running, get_state_snapshot, trigger_event, enqueue_user_run
+from loop import is_running, get_state_snapshot, trigger_event, enqueue_user_run, enqueue_sound_run
 from thumbnailer import thumb_path_for, avatar_path
 import photo_converter as _photo_converter
 
@@ -443,6 +443,14 @@ def create_app() -> Flask:
     def get_backfill_failed():
         return jsonify(db.get_videos_stats_failed())
 
+    @app.route("/api/backfill/reset", methods=["POST"])
+    def reset_backfill():
+        with _backfill_lock:
+            if _backfill_state["running"]:
+                return jsonify({"error": "Backfill is currently running"}), 409
+        count = db.reset_backfill_status()
+        return jsonify({"ok": True, "reset": count})
+
     @app.route("/api/stats", methods=["GET"])
     def get_aggregate_stats():
         return jsonify(db.get_aggregate_stats())
@@ -504,6 +512,65 @@ def create_app() -> Flask:
         if is_running():
             return jsonify({"error": "Loop is already running"}), 409
         trigger_event.set()
+        return jsonify({"ok": True})
+
+    # Jobs API
+
+    # Sound tracking API
+
+    @app.route("/api/sounds", methods=["GET"])
+    def list_sounds():
+        return jsonify(db.get_all_sounds())
+
+    @app.route("/api/sounds", methods=["POST"])
+    def add_sound():
+        body     = request.get_json(silent=True) or {}
+        raw      = str(body.get("sound_id", "")).strip()
+        label    = str(body.get("label", "")).strip() or None
+
+        # Accept full TikTok sound URLs — extract the trailing numeric ID
+        import re as _re
+        m = _re.search(r'(\d{10,25})(?:[^0-9]|$)', raw)
+        sound_id = m.group(1) if m else raw
+
+        if not sound_id.isdigit():
+            return jsonify({"error": "sound_id must be numeric (or a TikTok sound URL)"}), 400
+
+        added = db.add_sound(sound_id, label)
+        if not added:
+            return jsonify({"error": "Sound is already being tracked"}), 409
+        return jsonify({"ok": True, "sound_id": sound_id}), 201
+
+    @app.route("/api/sounds/<sound_id>", methods=["PATCH"])
+    def update_sound(sound_id: str):
+        if not db.get_sound(sound_id):
+            return jsonify({"error": "Sound not found"}), 404
+        body  = request.get_json(silent=True) or {}
+        label = body.get("label")
+        if label is not None:
+            label = str(label).strip() or None
+        db.update_sound_label(sound_id, label)
+        return jsonify({"ok": True})
+
+    @app.route("/api/sounds/<sound_id>", methods=["DELETE"])
+    def remove_sound(sound_id: str):
+        if not db.get_sound(sound_id):
+            return jsonify({"error": "Sound not found"}), 404
+        db.remove_sound(sound_id)
+        return jsonify({"ok": True})
+
+    @app.route("/api/sounds/<sound_id>/videos", methods=["GET"])
+    def sound_videos(sound_id: str):
+        if not db.get_sound(sound_id):
+            return jsonify({"error": "Sound not found"}), 404
+        return jsonify(db.get_sound_videos(sound_id))
+
+    @app.route("/api/sounds/<sound_id>/run", methods=["POST"])
+    def run_sound(sound_id: str):
+        if not db.get_sound(sound_id):
+            return jsonify({"error": "Sound not found"}), 404
+        if not enqueue_sound_run(sound_id):
+            return jsonify({"error": "Already queued or running"}), 409
         return jsonify({"ok": True})
 
     # Jobs API
