@@ -31,10 +31,12 @@ COPY . .
 # Persistent volumes are mounted here at runtime
 RUN mkdir -p /app/data /app/videos
 
+ARG BUILD_VERSION=dev
 ENV PYTHONUNBUFFERED=1 \
     DATA_DIR=/app/data \
     VIDEOS_DIR=/app/videos \
-    WEB_PORT=5000
+    WEB_PORT=5000 \
+    APP_VERSION=${BUILD_VERSION}
 
 EXPOSE 5000
 

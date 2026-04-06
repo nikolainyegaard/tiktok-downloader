@@ -56,9 +56,25 @@ def _process_add(username: str) -> None:
             _pending[username] = {"status": "error", "message": "User not found"}
         return
 
-    if db.get_user(info["tiktok_id"]):
-        # User already exists by TikTok ID (may have changed username or been added
-        # before sec_uid was stored). Patch the record so the loop can find them.
+    existing = db.get_user(info["tiktok_id"])
+    if existing:
+        if not existing.get("enabled"):
+            # Sound-discovered stub (enabled=0) — promote to a fully tracked user.
+            db.set_user_enabled(info["tiktok_id"], True)
+            db.update_user_info(
+                tiktok_id=info["tiktok_id"],
+                username=info["username"],
+                display_name=info["display_name"],
+                bio=info["bio"],
+                follower_count=info["follower_count"],
+                following_count=info["following_count"],
+                video_count=info["video_count"],
+                sec_uid=info.get("sec_uid"),
+            )
+            with _pending_lock:
+                del _pending[username]
+            return
+        # Fully tracked user already exists.
         db.update_user_info(
             tiktok_id=info["tiktok_id"],
             username=info["username"],
@@ -113,6 +129,68 @@ _backfill_state: dict = {"running": False, "done": 0, "total": 0, "errors": 0}
 
 _cleanup_lock  = threading.Lock()
 _cleanup_state: dict = {"running": False, "current": "", "steps": [], "removed": 0, "done": False}
+
+
+# Audio file cleanup
+
+_AUDIO_EXTENSIONS = frozenset([".mp3", ".m4a", ".m4b", ".aac", ".ogg", ".wav", ".flac", ".opus"])
+
+_audio_cleanup_lock  = threading.Lock()
+_audio_cleanup_state: dict = {
+    "running":    False,
+    "found":      0,
+    "deleted":    0,
+    "db_removed": 0,
+    "errors":     0,
+    "last_run":   None,
+}
+
+
+def _run_audio_cleanup() -> None:
+    import glob as _glob2
+    import time as _time
+
+    with _audio_cleanup_lock:
+        if _audio_cleanup_state["running"]:
+            return
+        _audio_cleanup_state.update({"running": True, "found": 0, "deleted": 0, "db_removed": 0, "errors": 0})
+
+    print(f"[audio-cleanup] Scanning {VIDEOS_DIR} for audio-only files…")
+    try:
+        audio_files = [
+            p for p in _glob2.glob(os.path.join(VIDEOS_DIR, "@*", "*"))
+            if os.path.isfile(p) and os.path.splitext(p)[1].lower() in _AUDIO_EXTENSIONS
+        ]
+
+        with _audio_cleanup_lock:
+            _audio_cleanup_state["found"] = len(audio_files)
+
+        print(f"[audio-cleanup] Found {len(audio_files)} audio file(s)")
+
+        for path in audio_files:
+            video_id = os.path.splitext(os.path.basename(path))[0]
+            try:
+                os.remove(path)
+                with _audio_cleanup_lock:
+                    _audio_cleanup_state["deleted"] += 1
+                print(f"[audio-cleanup] Deleted {path}")
+            except OSError as e:
+                print(f"[audio-cleanup] Failed to delete {path}: {e}")
+                with _audio_cleanup_lock:
+                    _audio_cleanup_state["errors"] += 1
+                continue
+
+            if db.delete_video(video_id):
+                with _audio_cleanup_lock:
+                    _audio_cleanup_state["db_removed"] += 1
+                print(f"[audio-cleanup] Removed {video_id} from database")
+
+    except Exception as e:
+        print(f"[audio-cleanup] Unexpected error: {e}")
+    finally:
+        with _audio_cleanup_lock:
+            _audio_cleanup_state["running"]  = False
+            _audio_cleanup_state["last_run"] = _time.strftime("%Y-%m-%d %H:%M:%S")
 
 
 def _run_backfill() -> None:
@@ -415,6 +493,37 @@ def create_app() -> Flask:
             return ("", 404)
         return jsonify({"urls": urls, "count": len(urls)})
 
+    @app.route("/api/videos/<video_id>/photos/zip", methods=["GET"])
+    def video_photos_zip(video_id: str):
+        """Stream all images of a photo post as a zip file."""
+        import io
+        import zipfile as _zipfile
+        video = db.get_video(video_id)
+        if not video or video.get("type") != "photo" or not video.get("file_path"):
+            return ("", 404)
+        folder = os.path.dirname(video["file_path"])
+        buf = io.BytesIO()
+        added = 0
+        with _zipfile.ZipFile(buf, "w", _zipfile.ZIP_STORED) as zf:
+            for i in range(1, 51):
+                for ext in ("avif", "jpg", "jpeg"):
+                    path = os.path.join(folder, f"{video_id}_{i:02d}.{ext}")
+                    if os.path.exists(path):
+                        zf.write(path, f"{video_id}_{i:02d}.{ext}")
+                        added += 1
+                        break
+                else:
+                    break
+        if not added:
+            return ("", 404)
+        buf.seek(0)
+        return send_file(
+            buf,
+            mimetype="application/zip",
+            as_attachment=True,
+            download_name=f"{video_id}_photos.zip",
+        )
+
     @app.route("/api/videos/<video_id>/photo/<int:n>", methods=["GET"])
     def video_photo(video_id: str, n: int):
         """Serve the nth image (1-indexed) of a photo post."""
@@ -501,6 +610,28 @@ def create_app() -> Flask:
             return jsonify({"error": "User not found"}), 404
         if not enqueue_user_run(tiktok_id):
             return jsonify({"error": "Already queued or running"}), 409
+        return jsonify({"ok": True})
+
+    @app.route("/api/users/<tiktok_id>/tracking", methods=["PATCH"])
+    def set_user_tracking(tiktok_id: str):
+        if not db.get_user(tiktok_id):
+            return jsonify({"error": "User not found"}), 404
+        body    = request.get_json(silent=True) or {}
+        enabled = body.get("enabled")
+        if not isinstance(enabled, bool):
+            return jsonify({"error": "enabled must be a boolean"}), 400
+        db.set_user_tracking_enabled(tiktok_id, enabled)
+        return jsonify({"ok": True})
+
+    @app.route("/api/sounds/<sound_id>/tracking", methods=["PATCH"])
+    def set_sound_tracking(sound_id: str):
+        if not db.get_sound(sound_id):
+            return jsonify({"error": "Sound not found"}), 404
+        body    = request.get_json(silent=True) or {}
+        enabled = body.get("enabled")
+        if not isinstance(enabled, bool):
+            return jsonify({"error": "enabled must be a boolean"}), 400
+        db.set_sound_tracking_enabled(sound_id, enabled)
         return jsonify({"ok": True})
 
     # Loop API
@@ -619,5 +750,72 @@ def create_app() -> Flask:
         if not _photo_converter.start():
             return jsonify({"error": "Already running"}), 409
         return jsonify({"ok": True})
+
+    @app.route("/api/jobs/audio-cleanup/status", methods=["GET"])
+    def get_audio_cleanup_status():
+        with _audio_cleanup_lock:
+            return jsonify(dict(_audio_cleanup_state))
+
+    @app.route("/api/jobs/audio-cleanup/start", methods=["POST"])
+    def start_audio_cleanup():
+        with _audio_cleanup_lock:
+            if _audio_cleanup_state["running"]:
+                return jsonify({"error": "Already running"}), 409
+        threading.Thread(target=_run_audio_cleanup, daemon=True, name="audio-cleanup").start()
+        return jsonify({"ok": True})
+
+    # ── Diagnostics API ───────────────────────────────────────────────────────────
+
+    @app.route("/api/debug/fetch", methods=["POST"])
+    def debug_fetch():
+        import json, traceback as _tb
+
+        body   = request.get_json(silent=True) or {}
+        source = body.get("source", "")
+        action = body.get("action", "")
+        inp    = (body.get("input") or "").strip()
+
+        if not inp:
+            return jsonify({"ok": False, "output": "Error: no input provided"})
+
+        try:
+            # ── get_video_details ─────────────────────────────────────────────
+            if source == "get_video_details":
+                m_vid  = re.search(r'/(?:video|photo)/(\d+)', inp)
+                m_user = re.search(r'@([\w.]+)/', inp)
+                video_id = m_vid.group(1)  if m_vid  else inp
+                username = m_user.group(1) if m_user else "user"
+                cookies  = get_cookies_flat()
+                result   = get_video_details(video_id, username, cookies)
+                return jsonify({"ok": True, "output": json.dumps(result, indent=2, default=str)})
+
+            # ── yt-dlp flat user listing ──────────────────────────────────────
+            elif source == "ytdlp" and action == "user_videos":
+                from tiktok_api import get_user_videos
+                result = get_user_videos(inp, COOKIES_PATH if os.path.exists(COOKIES_PATH) else None)
+                return jsonify({"ok": True, "output": json.dumps(result, indent=2, default=str)})
+
+            # ── raw yt-dlp info (no download) ─────────────────────────────────
+            elif source == "ytdlp" and action == "video_info":
+                import yt_dlp
+                opts = {"quiet": True, "no_warnings": True,
+                        **({"cookiefile": COOKIES_PATH} if os.path.exists(COOKIES_PATH) else {})}
+                with yt_dlp.YoutubeDL(opts) as ydl:
+                    info = ydl.sanitize_info(ydl.extract_info(inp, download=False))
+                return jsonify({"ok": True, "output": json.dumps(info, indent=2, default=str)})
+
+            # ── TikTokApi user profile ────────────────────────────────────────
+            elif source == "tiktokapi" and action == "user_info":
+                from loop import _fetch_user_info
+                # inp can be @username or username
+                username = inp.lstrip("@")
+                result   = asyncio.run(_fetch_user_info(username))
+                return jsonify({"ok": True, "output": json.dumps(result, indent=2, default=str)})
+
+            else:
+                return jsonify({"ok": False, "output": f"Unknown source/action: {source}/{action}"})
+
+        except Exception as e:
+            return jsonify({"ok": False, "output": f"Error: {e}\n\n{_tb.format_exc()}"})
 
     return app

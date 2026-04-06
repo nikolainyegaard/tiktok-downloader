@@ -118,9 +118,11 @@ Each sound card shows its label (or sound ID), a video count, and Run/Remove but
 
 Click **Edit label** in the sound modal header to rename a sound. Click **Run** on the card or in the modal to trigger an immediate sound run without waiting for the next loop.
 
-Use the filter buttons (Public/Private, Active/Banned) next to the sort control to narrow the user list.
+Use the filter buttons next to the sort control to narrow the user list. The **Privacy** filter has pills for Public / Private / Banned. The **Tracking** filter has pills for All / Active / Inactive (inactive = tracking paused).
 
-Click anywhere on a user card (other than the Run/Remove buttons) to open a detail view showing their full profile info, profile change history, and a complete, sortable, filterable list of all their downloaded videos with thumbnails. From the video list:
+Each user card has a **tracking toggle** in its footer. Turning it off pauses new-video downloads for that account without removing it — profile changes and deletion/ban detection continue running. The card dims to show the paused state.
+
+Click anywhere on a user card (other than the Run/Remove/toggle buttons) to open a detail view showing their full profile info, profile change history, and a complete, sortable, filterable list of all their downloaded videos with thumbnails. From the video list:
 
 - **Click a thumbnail** to preview the image full-size in an overlay.
 - **Click the ▶ button** (video posts only) to play the video directly in the browser.

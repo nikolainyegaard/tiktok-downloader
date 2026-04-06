@@ -215,7 +215,7 @@ async def _fetch_user_info(username: str, sec_uid: str | None = None) -> dict:
         return await get_user_info(api, username=username)
 
 
-async def _process_single_user(user: dict, cookies: dict):
+async def _process_single_user(user: dict, cookies: dict, fetch_videos: bool = True):
     tiktok_id = user["tiktok_id"]
 
     with _user_state_lock:
@@ -271,6 +271,10 @@ async def _process_single_user(user: dict, cookies: dict):
             _log(f"  Failed to fetch profile info: {e}")
             username     = user["username"]
             display_name = user.get("display_name") or username
+
+        if not fetch_videos:
+            _log(f"  Video fetch skipped (tracking disabled for @{username})")
+            return
 
         try:
             remote_videos = get_user_videos(tiktok_id, COOKIES_PATH)
@@ -390,7 +394,8 @@ async def _process_all_users(users: list[dict]):
     for idx, user in enumerate(users):
         if idx > 0:
             await asyncio.sleep(random.uniform(2, 5))
-        await _process_single_user(user, cookies)
+        fetch_videos = bool(user.get("tracking_enabled", 1))
+        await _process_single_user(user, cookies, fetch_videos=fetch_videos)
 
 
 # ── Manual run workers ────────────────────────────────────────────────────────

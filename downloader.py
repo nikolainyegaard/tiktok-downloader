@@ -56,7 +56,7 @@ def download_video(*, video_id: str, username: str, tiktok_id: str,
 
     ydl_opts: dict[str, Any] = {
         "outtmpl":             output_template,
-        "format":              "bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best",
+        "format":              "bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]",
         "merge_output_format": "mp4",
         "socket_timeout":      30,
         "retries":             3,
@@ -109,10 +109,23 @@ def download_video(*, video_id: str, username: str, tiktok_id: str,
         os.remove(actual_path)
         return None
 
+    # Reject audio-only downloads — yt-dlp's final /best fallback was removed, but
+    # some edge cases (very old posts, inaccessible video streams) can still produce
+    # audio files.  Storing them as videos would pollute the library.
+    _audio_exts = (".mp3", ".m4a", ".m4b", ".aac", ".ogg", ".wav", ".flac", ".opus")
+    if actual_path.lower().endswith(_audio_exts):
+        print(f"[{_ts()}] Rejected audio-only file for {video_id} ({os.path.basename(actual_path)}) — removing.")
+        os.remove(actual_path)
+        return None
+
     print(f"[{_ts()}] Saved {video_id} ({file_size:,} bytes) → {actual_path}")
     if upload_date:
         os.utime(actual_path, (upload_date, upload_date))
-    generate_thumbnail(video_id, actual_path)
+    thumb = generate_thumbnail(video_id, actual_path)
+    if thumb:
+        print(f"[{_ts()}] Thumbnail OK: {os.path.basename(thumb)}")
+    else:
+        print(f"[{_ts()}] Thumbnail FAILED for {video_id} — see [thumb] lines above")
     ytdlp_data = _clean_ytdlp_info(ydl_info)
     return {"file_path": actual_path, "ytdlp_data": ytdlp_data}
 

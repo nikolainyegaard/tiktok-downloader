@@ -5,7 +5,7 @@ All modules import paths and settings from here.
 
 import os
 
-APP_VERSION = "1.16.4"
+APP_VERSION = os.environ.get("APP_VERSION", "dev")
 import shutil
 
 DATA_DIR     = os.environ.get("DATA_DIR",   "./data")
@@ -20,7 +20,7 @@ USER_LOOP_INTERVAL_MINUTES  = int(os.environ.get("USER_LOOP_INTERVAL_MINUTES",  
 SOUND_LOOP_INTERVAL_MINUTES = int(os.environ.get("SOUND_LOOP_INTERVAL_MINUTES", 60))
 WEB_PORT                    = int(os.environ.get("WEB_PORT", 5000))
 
-THUMBNAIL_WORKERS  = int(os.environ.get("THUMBNAIL_WORKERS", min(os.cpu_count() or 4, 12)))
+THUMBNAIL_WORKERS  = int(os.environ.get("THUMBNAIL_WORKERS", min((os.cpu_count() or 4) // 4, 4) or 1))
 THUMBNAIL_USE_GPU  = os.environ.get("THUMBNAIL_USE_GPU", "").lower() in ("1", "true", "yes")
 
 # Use Google Chrome if available (better bot detection resistance than Playwright Chromium).
