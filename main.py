@@ -183,7 +183,8 @@ def _user_loop_thread():
             time.sleep(30)
         if was_waiting:
             print(f"{_ts()} User loop: sound loop finished, waiting 5 min buffer.")
-            time.sleep(5 * 60)
+            trigger_user_event.wait(timeout=5 * 60)
+            trigger_user_event.clear()
 
         run_user_loop()
 
@@ -220,7 +221,8 @@ def _sound_loop_thread():
             time.sleep(30)
         if was_waiting:
             print(f"{_ts()} Sound loop: user loop finished, waiting 5 min buffer.")
-            time.sleep(5 * 60)
+            trigger_sound_event.wait(timeout=5 * 60)
+            trigger_sound_event.clear()
 
         run_sound_loop()
 
