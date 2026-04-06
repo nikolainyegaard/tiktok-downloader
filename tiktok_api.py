@@ -122,6 +122,11 @@ def get_video_details(video_id: str, username: str, cookies: dict) -> dict:
         impersonate="chrome120", timeout=30,
     )
 
+    if resp.status_code != 200:
+        raise RuntimeError(
+            f"HTTP {resp.status_code} fetching video {video_id} details"
+        )
+
     match = re.search(
         r'<script[^>]+\bid=["\']__UNIVERSAL_DATA_FOR_REHYDRATION__["\'][^>]*>'
         r'([^<]+)</script>',

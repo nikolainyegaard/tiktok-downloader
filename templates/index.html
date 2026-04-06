@@ -162,6 +162,7 @@
       font-family: inherit;
     }
     .text-input:focus { border-color: var(--accent); }
+    .text-input::placeholder { color: var(--muted); opacity: 1; }
 
     /* Hide number input spinners — values like 180 are typed, not incremented */
     input[type="number"]::-webkit-inner-spin-button,
@@ -214,7 +215,6 @@
 
     .handle-input {
       flex: 1;
-      max-width: 360px;
       background: var(--surface);
       border: 1px solid var(--border);
       border-radius: var(--radius);
@@ -319,14 +319,29 @@
     .stat-item-value { font-size: 13px; font-weight: 700; color: var(--text); }
 
     .account-status { display: inline-block; font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 99px; white-space: nowrap; }
-    .account-status.active  { background: rgba(76,175,125,.15); color: var(--green); }
-    .account-status.banned  { background: rgba(224,82,82,.15);  color: var(--red); }
-    .account-status.unknown { background: var(--surface2); color: var(--muted); }
+    .account-status.active   { background: rgba(76,175,125,.15); color: var(--green); }
+    .account-status.inactive { background: var(--surface2);      color: var(--muted); }
+    .account-status.unknown  { background: var(--surface2);      color: var(--muted); }
 
     .privacy-status { display: inline-block; font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 99px; white-space: nowrap; }
     .privacy-status.public             { background: rgba(76,175,125,.15); color: var(--green); }
     .privacy-status.private-accessible { background: rgba(224,168,58,.15); color: var(--yellow); }
     .privacy-status.private-blocked    { background: rgba(224,82,82,.15);  color: var(--red); }
+    .privacy-status.banned             { background: rgba(224,82,82,.15);  color: var(--red); }
+
+    /* Inactive card — dim content, leave footer/pills/buttons unchanged */
+    .user-card-inactive .user-card-top,
+    .user-card-inactive .user-bio-area,
+    .user-card-inactive .user-stats { opacity: 0.4; }
+
+    /* Tracking toggle switch */
+    .tracking-toggle { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; user-select: none; vertical-align: middle; }
+    .tracking-toggle input { display: none; }
+    .toggle-track { width: 30px; height: 17px; background: var(--border); border-radius: 99px; position: relative; transition: background 0.2s; flex-shrink: 0; }
+    .tracking-toggle input:checked + .toggle-track { background: var(--accent); }
+    .toggle-thumb { position: absolute; top: 2px; left: 2px; width: 13px; height: 13px; background: #fff; border-radius: 50%; transition: left 0.2s; }
+    .tracking-toggle input:checked + .toggle-track .toggle-thumb { left: 15px; }
+    .toggle-label { font-size: 12px; color: var(--muted); }
 
     /* Bio area always reserves 3-line height so stats/footer sit at a consistent position */
     .user-bio-area {
@@ -1174,14 +1189,15 @@
             <button class="filter-pill active" id="ufPrivAll"     onclick="setUserFilter('priv','all')">All</button>
             <button class="filter-pill"        id="ufPrivPublic"  onclick="setUserFilter('priv','public')">Public</button>
             <button class="filter-pill"        id="ufPrivPrivate" onclick="setUserFilter('priv','private')">Private</button>
+            <button class="filter-pill"        id="ufPrivBanned"  onclick="setUserFilter('priv','banned')">Banned</button>
           </div>
         </div>
         <div style="display:flex;align-items:center;gap:4px;">
-          <span style="font-size:11px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--muted);">Status</span>
+          <span style="font-size:11px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--muted);">Tracking</span>
           <div class="filter-pills">
-            <button class="filter-pill active" id="ufStatAll"    onclick="setUserFilter('stat','all')">All</button>
-            <button class="filter-pill"        id="ufStatActive" onclick="setUserFilter('stat','active')">Active</button>
-            <button class="filter-pill"        id="ufStatBanned" onclick="setUserFilter('stat','banned')">Banned</button>
+            <button class="filter-pill active" id="ufStatAll"      onclick="setUserFilter('stat','all')">All</button>
+            <button class="filter-pill"        id="ufStatActive"   onclick="setUserFilter('stat','active')">Active</button>
+            <button class="filter-pill"        id="ufStatInactive" onclick="setUserFilter('stat','inactive')">Inactive</button>
           </div>
         </div>
         <div style="display:flex;align-items:center;gap:4px;">
@@ -1231,6 +1247,7 @@
       <div class="settings-nav-item"        id="snav-backfill"  onclick="switchSettingsSection('backfill')">Backfill</div>
       <div class="settings-nav-item"        id="snav-database"  onclick="switchSettingsSection('database')">Database</div>
       <div class="settings-nav-item"        id="snav-jobs"      onclick="switchSettingsSection('jobs')">Jobs</div>
+      <div class="settings-nav-item"        id="snav-diag"      onclick="switchSettingsSection('diag')">Diagnostics</div>
     </nav>
     <div class="settings-content">
 
@@ -1372,6 +1389,61 @@
               <span><span id="jobAvifCount"></span> <span id="jobAvifPct" style="font-weight:600"></span></span>
             </div>
           </div>
+        </div>
+
+        <div class="job-card">
+          <div class="job-card-hdr">
+            <div style="flex:1">
+              <div class="job-card-title">Remove audio-only files</div>
+              <div class="job-card-desc">
+                Scans the videos folder for audio-only files (.mp3, .m4a, etc.) that were
+                downloaded before yt-dlp was restricted to video-only formats. Deletes each
+                file from disk and removes its database entry. Safe to run multiple times.
+              </div>
+            </div>
+            <button class="btn-danger" id="jobAudioBtn" onclick="triggerAudioCleanup()" style="flex-shrink:0;align-self:flex-start">Run</button>
+          </div>
+          <div id="jobAudioResult" style="font-size:12px;color:var(--muted);margin-top:10px;display:none"></div>
+        </div>
+      </div>
+
+      <!-- Diagnostics section -->
+      <div id="ssec-diag" style="display:none">
+        <div class="settings-section-title">API Diagnostics</div>
+        <div style="font-size:12px;color:var(--muted);margin-bottom:16px;">
+          Run raw API calls and inspect the response. Useful for debugging download issues.
+          TikTokApi calls open a browser session and may take 10–30 seconds.
+        </div>
+
+        <div style="display:flex;gap:10px;margin-bottom:10px;flex-wrap:wrap">
+          <select id="diagSource" onchange="diagSourceChanged()" style="flex:1;min-width:160px">
+            <option value="get_video_details">get_video_details</option>
+            <option value="ytdlp">yt-dlp</option>
+            <option value="tiktokapi">TikTokApi</option>
+          </select>
+          <select id="diagAction" style="flex:1;min-width:160px">
+            <option value="">— (paste a URL below)</option>
+          </select>
+        </div>
+
+        <div style="display:flex;gap:10px;margin-bottom:12px">
+          <input id="diagInput" class="text-input" type="text"
+                 placeholder="https://www.tiktok.com/@user/video/123… or user ID"
+                 style="flex:1">
+          <button class="btn-primary" id="diagRunBtn" onclick="diagRun()" style="flex-shrink:0">Run</button>
+        </div>
+
+        <div style="position:relative">
+          <pre id="diagOutput" style="
+            background:var(--bg-card);border:1px solid var(--border);border-radius:8px;
+            padding:12px;font-size:11px;line-height:1.5;max-height:420px;overflow:auto;
+            white-space:pre-wrap;word-break:break-all;color:var(--text);margin:0;
+            min-height:60px
+          ">Output will appear here.</pre>
+          <button onclick="diagCopy()" title="Copy output" style="
+            position:absolute;top:8px;right:8px;background:var(--bg-hover);border:1px solid var(--border);
+            border-radius:5px;padding:3px 8px;font-size:11px;color:var(--muted);cursor:pointer
+          ">Copy</button>
         </div>
       </div>
 
@@ -1766,13 +1838,14 @@
 
   function switchSettingsSection(name) {
     _settingsSection = name;
-    ['cookies', 'loops', 'backfill', 'database', 'jobs'].forEach(s => {
+    ['cookies', 'loops', 'backfill', 'database', 'jobs', 'diag'].forEach(s => {
       document.getElementById(`ssec-${s}`).style.display    = s === name ? '' : 'none';
       document.getElementById(`snav-${s}`).classList.toggle('active', s === name);
     });
     if (name === 'loops') { loadSettings(); }
     if (name === 'jobs')  { _jobsLoadStatus(); _startJobsPoll(); }
     else                  { _stopJobsPoll(); }
+    if (name === 'diag')  { diagSourceChanged(); }
   }
 
   // ── Database cleanup ──────────────────────────────────────────────────────────
@@ -1888,6 +1961,106 @@
     if (_jobsPoll) { clearInterval(_jobsPoll); _jobsPoll = null; }
   }
 
+  // ── Diagnostics ────────────────────────────────────────────────────────────────
+
+  const _DIAG_ACTIONS = {
+    get_video_details: [{ value: "",              label: "Fetch post details (paste TikTok URL)" }],
+    ytdlp:            [{ value: "user_videos",    label: "List user videos (paste tiktok_id)" },
+                       { value: "video_info",     label: "Raw video info (paste TikTok URL)" }],
+    tiktokapi:        [{ value: "user_info",      label: "User profile (paste @username or username)" }],
+  };
+
+  function diagSourceChanged() {
+    const source  = document.getElementById('diagSource').value;
+    const actionEl = document.getElementById('diagAction');
+    actionEl.innerHTML = (_DIAG_ACTIONS[source] || [])
+      .map(a => `<option value="${a.value}">${a.label}</option>`).join('');
+    const placeholders = {
+      get_video_details: 'https://www.tiktok.com/@user/video/123…',
+      ytdlp:             'tiktok_id (numeric) or TikTok URL',
+      tiktokapi:         '@username or username',
+    };
+    document.getElementById('diagInput').placeholder = placeholders[source] || '';
+  }
+
+  async function diagRun() {
+    const source  = document.getElementById('diagSource').value;
+    const action  = document.getElementById('diagAction').value;
+    const inp     = document.getElementById('diagInput').value.trim();
+    const outEl   = document.getElementById('diagOutput');
+    const btn     = document.getElementById('diagRunBtn');
+
+    if (!inp) { outEl.textContent = 'Error: enter a URL or ID first.'; return; }
+
+    btn.disabled  = true;
+    outEl.textContent = 'Running… (this may take up to 30 s for TikTokApi calls)';
+
+    const { ok, data } = await apiJSON('/api/debug/fetch', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ source, action, input: inp }),
+    });
+
+    btn.disabled = false;
+    outEl.textContent = ok ? (data.output ?? JSON.stringify(data, null, 2))
+                           : (data?.output || data?.error || 'Request failed');
+  }
+
+  function diagCopy() {
+    const text = document.getElementById('diagOutput').textContent;
+    navigator.clipboard.writeText(text).catch(() => {
+      const ta = document.createElement('textarea');
+      ta.value = text;
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand('copy');
+      document.body.removeChild(ta);
+    });
+  }
+
+  // ── Audio cleanup job ──────────────────────────────────────────────────────────
+
+  let _audioCleanupPoll = null;
+
+  async function triggerAudioCleanup() {
+    const btn    = document.getElementById('jobAudioBtn');
+    const result = document.getElementById('jobAudioResult');
+    btn.disabled = true;
+    result.style.display = 'none';
+    const { ok, data } = await apiJSON('/api/jobs/audio-cleanup/start', { method: 'POST' });
+    if (!ok) { alert(data.error || 'Failed to start'); btn.disabled = false; return; }
+    _startAudioCleanupPoll();
+  }
+
+  function _startAudioCleanupPoll() {
+    if (_audioCleanupPoll) return;
+    _audioCleanupPoll = setInterval(_audioCleanupLoadStatus, 1000);
+  }
+
+  async function _audioCleanupLoadStatus() {
+    const { ok, data } = await apiJSON('/api/jobs/audio-cleanup/status');
+    if (!ok) return;
+
+    const btn    = document.getElementById('jobAudioBtn');
+    const result = document.getElementById('jobAudioResult');
+
+    if (data.running) {
+      result.style.display = 'block';
+      result.textContent = `Running… ${data.deleted} deleted, ${data.db_removed} removed from DB`;
+    } else if (data.last_run) {
+      if (_audioCleanupPoll) { clearInterval(_audioCleanupPoll); _audioCleanupPoll = null; }
+      btn.disabled = false;
+      result.style.display = 'block';
+      if (data.found === 0) {
+        result.textContent = 'No audio files found.';
+      } else {
+        const parts = [`Found ${data.found}`, `deleted ${data.deleted}`, `removed ${data.db_removed} from DB`];
+        if (data.errors) parts.push(`${data.errors} error${data.errors !== 1 ? 's' : ''}`);
+        result.textContent = parts.join(' · ') + ` — ${data.last_run}`;
+      }
+    }
+  }
+
   // ── Users ─────────────────────────────────────────────────────────────────────
 
   const _SORT_DIR_LABELS = {
@@ -1901,9 +2074,8 @@
 
   function setUserFilter(group, value) {
     userFilter[group] = value;
-    // Update pill active states
-    const privIds = { all: 'ufPrivAll', public: 'ufPrivPublic', private: 'ufPrivPrivate' };
-    const statIds = { all: 'ufStatAll', active: 'ufStatActive', banned: 'ufStatBanned' };
+    const privIds = { all: 'ufPrivAll', public: 'ufPrivPublic', private: 'ufPrivPrivate', banned: 'ufPrivBanned' };
+    const statIds = { all: 'ufStatAll', active: 'ufStatActive', inactive: 'ufStatInactive' };
     const map = group === 'priv' ? privIds : statIds;
     Object.entries(map).forEach(([v, id]) => {
       document.getElementById(id)?.classList.toggle('active', v === value);
@@ -1931,10 +2103,11 @@
 
   function _filteredUsers() {
     return users.filter(u => {
-      if (userFilter.priv === 'public'  && u.privacy_status !== 'public')  return false;
-      if (userFilter.priv === 'private' && !['private_accessible','private_blocked'].includes(u.privacy_status)) return false;
-      if (userFilter.stat === 'active'  && u.account_status !== 'active')  return false;
-      if (userFilter.stat === 'banned'  && u.account_status !== 'banned')  return false;
+      if (userFilter.priv === 'public'   && (u.privacy_status !== 'public' || u.account_status === 'banned')) return false;
+      if (userFilter.priv === 'private'  && !['private_accessible','private_blocked'].includes(u.privacy_status)) return false;
+      if (userFilter.priv === 'banned'   && u.account_status !== 'banned') return false;
+      if (userFilter.stat === 'active'   && u.tracking_enabled === 0) return false;
+      if (userFilter.stat === 'inactive' && u.tracking_enabled !== 0) return false;
       return true;
     });
   }
@@ -1971,18 +2144,24 @@
     }
 
     grid.innerHTML = _sortedUsers().map(u => {
-      const isCurrent = u.username === currentUser;
-      const status    = u.account_status || 'unknown';
-      const privacyMap = {
+      const isCurrent  = u.username === currentUser;
+      const isInactive = u.tracking_enabled === 0;
+
+      // Tracking pill (was account-status active/banned)
+      const trackingCls   = isInactive ? 'inactive' : 'active';
+      const trackingLabel = isInactive ? 'Inactive' : 'Active';
+
+      // Account pill: banned moves here from the old status pill
+      const accountPillMap = {
         'public':             ['public',             'Public'],
         'private_accessible': ['private-accessible', 'Private'],
         'private_blocked':    ['private-blocked',    'Private'],
       };
-      const [privacyCls, privacyLabel] = privacyMap[u.privacy_status] || [];
-      const privacyBadge = privacyCls
-        ? `<span class="privacy-status ${privacyCls}">${privacyLabel}</span>`
-        : '';
-      const statusLabel = status.charAt(0).toUpperCase() + status.slice(1);
+      const accountBadge = u.account_status === 'banned'
+        ? `<span class="privacy-status banned">Banned</span>`
+        : (accountPillMap[u.privacy_status]
+            ? `<span class="privacy-status ${accountPillMap[u.privacy_status][0]}">${accountPillMap[u.privacy_status][1]}</span>`
+            : '');
       const checked   = u.last_checked
         ? `Last checked ${fmt.rel(new Date(u.last_checked * 1000).toISOString())}`
         : 'Never checked';
@@ -1997,7 +2176,7 @@
       const runDisabled  = (inRunQueue || isRunCurrent) ? 'disabled' : '';
 
       return `
-        <div class="user-card${isCurrent ? ' user-card-current' : ''}" data-userid="${esc(u.tiktok_id)}" onclick="if(!event.target.closest('button'))openUserModal('${esc(u.tiktok_id)}')" role="button" tabindex="0">
+        <div class="user-card${isCurrent ? ' user-card-current' : ''}${isInactive ? ' user-card-inactive' : ''}" data-userid="${esc(u.tiktok_id)}" onclick="if(!event.target.closest('button'))openUserModal('${esc(u.tiktok_id)}')" role="button" tabindex="0">
           <div class="user-card-top">
             <div class="avatar-wrap">
               <span class="avatar-letter">${esc((u.username||'?')[0])}</span>
@@ -2011,8 +2190,8 @@
               <div class="user-id-line">${idLine}</div>
             </div>
             <div class="user-badges">
-              <span class="account-status ${status}">${statusLabel}</span>
-              ${privacyBadge}
+              <span class="account-status ${trackingCls}">${trackingLabel}</span>
+              ${accountBadge}
             </div>
           </div>
 
@@ -2159,15 +2338,17 @@
       return;
     }
     grid.innerHTML = sounds.map(s => {
-      const label    = s.label || s.sound_id;
-      const ttUrl    = `https://www.tiktok.com/music/-${s.sound_id}`;
-      const checked  = s.last_checked
+      const label      = s.label || s.sound_id;
+      const ttUrl      = `https://www.tiktok.com/music/-${s.sound_id}`;
+      const checked    = s.last_checked
         ? `Last checked ${fmt.rel(new Date(s.last_checked * 1000).toISOString())}`
         : 'Never checked';
-      const inQueue   = soundRunQueue.includes(s.sound_id);
-      const isCurrent = soundRunCurrent === s.sound_id;
-      const runLabel  = isCurrent ? 'Running…' : inQueue ? 'Queued' : 'Run';
-      const runDis    = (inQueue || isCurrent) ? 'disabled' : '';
+      const inQueue      = soundRunQueue.includes(s.sound_id);
+      const isCurrent    = soundRunCurrent === s.sound_id;
+      const runLabel     = isCurrent ? 'Running…' : inQueue ? 'Queued' : 'Run';
+      const runDis       = (inQueue || isCurrent) ? 'disabled' : '';
+      const sTrackingCls   = s.tracking_enabled === 0 ? 'inactive' : 'active';
+      const sTrackingLabel = s.tracking_enabled === 0 ? 'Inactive' : 'Active';
       return `
         <div class="user-card" data-soundid="${esc(s.sound_id)}" onclick="if(!event.target.closest('button,a'))openSoundModal('${esc(s.sound_id)}')" role="button" tabindex="0">
           <div class="user-card-top">
@@ -2180,6 +2361,9 @@
                    onmouseover="this.style.textDecoration='underline'" onmouseout="this.style.textDecoration='none'"
                 >${esc(s.sound_id)}</a>
               </div>
+            </div>
+            <div class="user-badges">
+              <span class="account-status ${sTrackingCls}">${sTrackingLabel}</span>
             </div>
           </div>
           <div class="user-bio-area"></div>
@@ -2299,6 +2483,9 @@
     const checked = s.last_checked
       ? 'Last checked ' + fmt.rel(new Date(s.last_checked * 1000).toISOString())
       : 'Never checked';
+    const sSoundInactive    = s.tracking_enabled === 0;
+    const sSoundTrackingCls = sSoundInactive ? 'inactive' : 'active';
+    const sSoundTrackingLbl = sSoundInactive ? 'Inactive' : 'Active';
     document.getElementById('soundModalHeader').innerHTML = `
       <div class="modal-avatar-wrap">
         <div class="sound-icon-wrap" style="width:56px;height:56px">
@@ -2310,6 +2497,12 @@
           <span class="modal-name">${esc(label)}</span>
           <button class="btn-ghost" style="font-size:11px;padding:3px 8px;margin-left:4px"
             onclick="editSoundLabel('${esc(s.sound_id)}')">Edit label</button>
+          <span class="account-status ${sSoundTrackingCls}">${sSoundTrackingLbl}</span>
+          <label class="tracking-toggle" title="${sSoundInactive ? 'Sound tracking disabled' : 'Sound tracking enabled'}">
+            <input type="checkbox" ${sSoundInactive ? '' : 'checked'} onchange="setSoundTracking('${esc(s.sound_id)}', this.checked)">
+            <span class="toggle-track"><span class="toggle-thumb"></span></span>
+            <span class="toggle-label">Track videos</span>
+          </label>
         </div>
         <div class="modal-handle">
           <a href="${ttUrl}" target="_blank" rel="noopener"
@@ -2479,13 +2672,8 @@
         <div class="video-cell">${fmtDateShort(v.upload_date)}</div>
         <div class="video-cell">${fmtDateShort(v.download_date)}</div>
         <div class="video-cell">${fmtDateShort(v.deleted_at)}</div>
-        <div class="video-cell" style="padding:0">
-          ${v.type === 'video'
-            ? `<button class="play-btn" onclick="event.stopPropagation();openVidModal('${esc(v.video_id)}')" title="Play video">▶</button>`
-            : v.type === 'photo'
-            ? `<button class="play-btn" onclick="event.stopPropagation();openCarousel('${esc(v.video_id)}')" title="View photos"><svg width="13" height="13" viewBox="0 0 13 13" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x=".75" y=".75" width="4.5" height="4.5" rx=".75"/><rect x="7.75" y=".75" width="4.5" height="4.5" rx=".75"/><rect x=".75" y="7.75" width="4.5" height="4.5" rx=".75"/><rect x="7.75" y="7.75" width="4.5" height="4.5" rx=".75"/></svg></button>`
-            : ''
-          }
+        <div class="video-cell" style="padding:0;display:flex;align-items:center;justify-content:center;gap:2px">
+          ${_videoActionBtns(v)}
         </div>
       `;
       list.appendChild(row);
@@ -2617,6 +2805,36 @@
     });
 
     if (autoScroll) body.scrollTop = body.scrollHeight;
+  }
+
+  async function setUserTracking(tiktokId, enabled) {
+    const { ok, data } = await apiJSON(`/api/users/${encodeURIComponent(tiktokId)}/tracking`, {
+      method: 'PATCH',
+      body: JSON.stringify({ enabled }),
+    });
+    if (!ok) { alert(data.error || 'Failed to update tracking'); return; }
+    const u = users.find(u => u.tiktok_id === tiktokId);
+    if (u) u.tracking_enabled = enabled ? 1 : 0;
+    if (_modalUser && _modalUser.tiktok_id === tiktokId) {
+      _modalUser.tracking_enabled = enabled ? 1 : 0;
+      _renderModalHeader(_modalUser);
+    }
+    renderUsers();
+  }
+
+  async function setSoundTracking(soundId, enabled) {
+    const { ok, data } = await apiJSON(`/api/sounds/${encodeURIComponent(soundId)}/tracking`, {
+      method: 'PATCH',
+      body: JSON.stringify({ enabled }),
+    });
+    if (!ok) { alert(data.error || 'Failed to update tracking'); return; }
+    const s = sounds.find(s => s.sound_id === soundId);
+    if (s) s.tracking_enabled = enabled ? 1 : 0;
+    if (_soundModal && _soundModal.sound_id === soundId) {
+      _soundModal.tracking_enabled = enabled ? 1 : 0;
+      _renderSoundModalHeader(_soundModal);
+    }
+    renderSounds();
   }
 
   async function triggerUserLoop() {
@@ -2953,14 +3171,24 @@
 
   function _renderModalHeader(u) {
     const oldNames = (u.old_usernames || []).map(n => `@${esc(n)}`).join(' · ');
-    const statusCls = { active: 'active', banned: 'banned' }[u.account_status] || 'unknown';
-    const statusLabel = (u.account_status || 'unknown');
+
+    // Tracking pill
+    const isInactive   = u.tracking_enabled === 0;
+    const trackingCls  = isInactive ? 'inactive' : 'active';
+    const trackingLbl  = isInactive ? 'Inactive' : 'Active';
+
+    // Account pill: banned absorbs into privacy slot
     const privacyMap = {
       'public':             ['public',             'Public'],
       'private_accessible': ['private-accessible', 'Private'],
       'private_blocked':    ['private-blocked',    'Private'],
     };
-    const [privCls, privLabel] = privacyMap[u.privacy_status] || [];
+    const accountBadge = u.account_status === 'banned'
+      ? `<span class="privacy-status banned">Banned</span>`
+      : (privacyMap[u.privacy_status]
+          ? `<span class="privacy-status ${privacyMap[u.privacy_status][0]}">${privacyMap[u.privacy_status][1]}</span>`
+          : '');
+
     const joinStr = u.join_date
       ? ' · Joined ' + new Date(u.join_date * 1000)
           .toLocaleDateString('en-GB', { month: 'short', year: 'numeric' })
@@ -2977,8 +3205,13 @@
         <div class="modal-name-row">
           <span class="modal-name">${esc(u.display_name || u.username)}</span>
           ${u.verified ? '<span class="modal-verified">✓ Verified</span>' : ''}
-          <span class="account-status ${statusCls}">${statusLabel.charAt(0).toUpperCase() + statusLabel.slice(1)}</span>
-          ${privCls ? `<span class="privacy-status ${privCls}">${privLabel}</span>` : ''}
+          <span class="account-status ${trackingCls}">${trackingLbl}</span>
+          ${accountBadge}
+          <label class="tracking-toggle" title="${isInactive ? 'Video tracking disabled — profile info still checked' : 'Video tracking enabled'}">
+            <input type="checkbox" ${isInactive ? '' : 'checked'} onchange="setUserTracking('${esc(u.tiktok_id)}', this.checked)">
+            <span class="toggle-track"><span class="toggle-thumb"></span></span>
+            <span class="toggle-label">Track videos</span>
+          </label>
         </div>
         <div class="modal-handle">
           @${esc(u.username)}
@@ -3200,6 +3433,27 @@
       + '</div>';
   }
 
+  const _dlIcon = `<svg width="13" height="13" viewBox="0 0 13 13" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M6.5 1v7M3.5 5.5l3 3 3-3M1.5 10.5h10"/></svg>`;
+
+  function _videoActionBtns(v) {
+    const id = esc(v.video_id);
+    let dl = '';
+    if (v.type === 'video' && v.file_path) {
+      dl = `<a class="play-btn" href="/api/videos/${id}/file" download="${id}.mp4"
+               onclick="event.stopPropagation()" title="Download video">${_dlIcon}</a>`;
+    } else if (v.type === 'photo' && v.file_path) {
+      dl = `<a class="play-btn" href="/api/videos/${id}/photos/zip" download="${id}_photos.zip"
+               onclick="event.stopPropagation()" title="Download all photos as zip">${_dlIcon}</a>`;
+    }
+    let play = '';
+    if (v.type === 'video') {
+      play = `<button class="play-btn" onclick="event.stopPropagation();openVidModal('${id}')" title="Play video">▶</button>`;
+    } else if (v.type === 'photo') {
+      play = `<button class="play-btn" onclick="event.stopPropagation();openCarousel('${id}')" title="View photos"><svg width="13" height="13" viewBox="0 0 13 13" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x=".75" y=".75" width="4.5" height="4.5" rx=".75"/><rect x="7.75" y=".75" width="4.5" height="4.5" rx=".75"/><rect x=".75" y="7.75" width="4.5" height="4.5" rx=".75"/><rect x="7.75" y="7.75" width="4.5" height="4.5" rx=".75"/></svg></button>`;
+    }
+    return dl + play;
+  }
+
   function _renderModalVideoList() {
     _modalLoaded = 0;
     if (_modalObs) { _modalObs.disconnect(); _modalObs = null; }
@@ -3239,13 +3493,8 @@
         <div class="video-cell">${fmtDateShort(v.upload_date)}</div>
         <div class="video-cell">${fmtDateShort(v.download_date)}</div>
         <div class="video-cell">${fmtDateShort(v.deleted_at)}</div>
-        <div class="video-cell" style="padding:0">
-          ${v.type === 'video'
-            ? `<button class="play-btn" onclick="event.stopPropagation();openVidModal('${esc(v.video_id)}')" title="Play video">▶</button>`
-            : v.type === 'photo'
-            ? `<button class="play-btn" onclick="event.stopPropagation();openCarousel('${esc(v.video_id)}')" title="View photos"><svg width="13" height="13" viewBox="0 0 13 13" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x=".75" y=".75" width="4.5" height="4.5" rx=".75"/><rect x="7.75" y=".75" width="4.5" height="4.5" rx=".75"/><rect x=".75" y="7.75" width="4.5" height="4.5" rx=".75"/><rect x="7.75" y="7.75" width="4.5" height="4.5" rx=".75"/></svg></button>`
-            : ''
-          }
+        <div class="video-cell" style="padding:0;display:flex;align-items:center;justify-content:center;gap:2px">
+          ${_videoActionBtns(v)}
         </div>
       `;
       list.appendChild(row);

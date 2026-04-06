@@ -178,8 +178,10 @@ def _convert_photo_posts() -> None:
                 _try_remove(jpg)
                 if new_first is None:
                     new_first = avif
+                print(f"[{_ts()}] [converter] photo → {os.path.basename(avif)}")
             else:
                 _inc_errors()
+                print(f"[{_ts()}] [converter] FAILED photo: {os.path.basename(jpg)}")
             _inc_done()
 
         # Update DB if first image path needs updating
@@ -200,8 +202,10 @@ def _convert_thumbnails() -> None:
                 continue
             if encode_avif(jpg, avif, CRF_THUMB):
                 _try_remove(jpg)
+                print(f"[{_ts()}] [converter] thumb → {os.path.basename(avif)}")
             else:
                 _inc_errors()
+                print(f"[{_ts()}] [converter] FAILED thumb: {os.path.basename(jpg)}")
             _inc_done()
 
 
@@ -217,8 +221,10 @@ def _convert_avatars() -> None:
             continue
         if encode_avif(jpg, avif, CRF_AVATAR):
             _try_remove(jpg)
+            print(f"[{_ts()}] [converter] avatar → {os.path.basename(avif)}")
         else:
             _inc_errors()
+            print(f"[{_ts()}] [converter] FAILED avatar: {os.path.basename(jpg)}")
         _inc_done()
 
 

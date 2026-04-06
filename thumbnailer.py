@@ -134,50 +134,95 @@ def generate_thumbnail(video_id: str, file_path: str) -> str | None:
         # Already have a thumbnail — AVIF or JPEG (JPEG will be converted by photo_converter)
         return thumb_path_for(video_id, file_path)
 
+    print(f"[{_ts()}] [thumb] Generating thumbnail for {video_id} ({os.path.basename(file_path)})")
     out_path = thumb_path_for(video_id, file_path)
     os.makedirs(os.path.dirname(out_path), exist_ok=True)
+
+    is_audio = file_path.lower().endswith((".mp3", ".m4a", ".m4b", ".aac", ".ogg", ".wav", ".flac", ".opus"))
+    if is_audio:
+        # Audio-only files have no video stream; thumbnail generation is not possible.
+        return None
 
     is_image = file_path.lower().endswith((".jpg", ".jpeg", ".avif", ".webp", ".png"))
 
     avif_encode_args = [
-        "-vf", f"scale={THUMB_WIDTH}:-1",
+        # scale to target width, keep aspect ratio, force even height (-2).
+        # format=yuv420p normalises the pixel format for libaom-av1.
+        "-vf", f"scale={THUMB_WIDTH}:-2,format=yuv420p",
         "-c:v", "libaom-av1",
         "-still-picture", "1",
         "-crf", str(CRF_THUMB),
         "-b:v", "0",
         "-cpu-used", "6",
+        "-threads", "2",
     ]
 
-    if is_image:
-        cmd = ["ffmpeg", "-i", file_path, *avif_encode_args, "-y", out_path]
-    elif THUMBNAIL_USE_GPU:
-        cmd = [
-            "ffmpeg",
-            "-hwaccel", "cuda",
-            "-ss", "1",
-            "-i", file_path,
-            "-vframes", "1",
-            *avif_encode_args,
-            "-y", out_path,
+    def _build_cmd(bsf: str | None = None) -> list[str]:
+        # bsf: optional bitstream filter string placed before -i to patch
+        # "reserved/reserved" colour primaries before the decoder reads them.
+        # FFmpeg 7's buffersrc rejects such streams with "Invalid colour space".
+        bsf_args = ["-bsf:v", bsf] if bsf else []
+        if is_image:
+            return ["ffmpeg", "-i", file_path, *avif_encode_args, "-y", out_path]
+        if THUMBNAIL_USE_GPU:
+            return ["ffmpeg", "-hwaccel", "cuda", "-ss", "1", *bsf_args, "-i", file_path,
+                    "-vframes", "1", *avif_encode_args, "-y", out_path]
+        return ["ffmpeg", "-ss", "1", *bsf_args, "-i", file_path,
+                "-vframes", "1", *avif_encode_args, "-y", out_path]
+
+    def _run(cmd: list[str]) -> tuple[int, str]:
+        result = subprocess.run(cmd, capture_output=True, timeout=120)
+        stderr = (result.stderr or b"").decode(errors="replace").strip()
+        # Strip the ffmpeg version/config banner so only actual error lines remain.
+        error_lines = [
+            ln for ln in stderr.splitlines()
+            if ln and not ln.startswith(("ffmpeg version", "built with", "configuration:", "  lib"))
         ]
-    else:
-        cmd = [
-            "ffmpeg",
-            "-ss", "1",
-            "-i", file_path,
-            "-vframes", "1",
-            *avif_encode_args,
-            "-y", out_path,
-        ]
+        return result.returncode, "\n".join(error_lines).strip() or "(no error detail)"
 
     try:
-        result = subprocess.run(cmd, capture_output=True, timeout=60)
-        if result.returncode == 0 and os.path.exists(out_path):
+        cmd = _build_cmd()
+        returncode, error_text = _run(cmd)
+
+        # FFmpeg 7 rejects streams with "reserved/reserved" colour primaries at
+        # the filter-graph input stage ("Invalid colour space").  This affects
+        # both HEVC and H.264 TikTok videos.  Detect the codec from the failed
+        # run's stderr and retry with the matching metadata BSF, which patches
+        # the bitstream before decoding so the decoder emits BT.709-tagged frames.
+        if returncode != 0 and "Invalid color space" in error_text:
+            if "Video: hevc" in error_text:
+                bsf = "hevc_metadata=colour_primaries=1:transfer_characteristics=1:matrix_coefficients=1"
+                codec_label = "hevc"
+            elif "Video: h264" in error_text:
+                bsf = "h264_metadata=colour_primaries=1:transfer_characteristics=1:matrix_coefficients=1"
+                codec_label = "h264"
+            else:
+                bsf = None
+                codec_label = None
+
+            if bsf:
+                print(f"[{_ts()}] [thumb] Retrying {video_id} with {codec_label}_metadata BSF (reserved colour primaries)")
+                _try_remove(out_path)
+                cmd = _build_cmd(bsf=bsf)
+                returncode, error_text = _run(cmd)
+
+        if returncode == 0 and os.path.exists(out_path):
             return out_path
+        if returncode != 0:
+            print(
+                f"[{_ts()}] [thumb] FAILED {video_id}"
+                f" — ffmpeg exit {returncode}: {error_text}"
+            )
+        else:
+            # ffmpeg exited 0 but wrote no output file (e.g. -ss past end of video)
+            print(
+                f"[{_ts()}] [thumb] FAILED {video_id}"
+                f" — ffmpeg exit 0, no output file: {error_text}"
+            )
     except subprocess.TimeoutExpired:
-        pass
-    except Exception:
-        pass
+        print(f"[{_ts()}] [thumb] TIMEOUT {video_id} (>{120}s)")
+    except Exception as e:
+        print(f"[{_ts()}] [thumb] ERROR {video_id}: {e}")
 
     _try_remove(out_path)
     return None

@@ -20,6 +20,9 @@ async def process_all_sounds(log: Callable[[str], None]) -> None:
         return
 
     for sound in sounds:
+        if not sound.get("tracking_enabled", 1):
+            log(f"[sound] Skipping '{sound.get('label') or sound['sound_id']}' (tracking disabled)")
+            continue
         await process_sound(sound, log)
 
 

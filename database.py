@@ -137,6 +137,8 @@ def _migrate_db(conn):
         "ALTER TABLE videos ADD COLUMN stats_last_error   TEXT",
         "ALTER TABLE users  ADD COLUMN banned_at          INTEGER",
         "ALTER TABLE videos ADD COLUMN music_id           TEXT",
+        "ALTER TABLE users  ADD COLUMN tracking_enabled   INTEGER NOT NULL DEFAULT 1",
+        "ALTER TABLE sounds ADD COLUMN tracking_enabled   INTEGER NOT NULL DEFAULT 1",
     ]
     for sql in migrations:
         try:
@@ -182,6 +184,33 @@ def set_setting(key: str, value) -> None:
             "INSERT INTO settings (key, value) VALUES (?, ?)"
             " ON CONFLICT(key) DO UPDATE SET value = excluded.value",
             (key, str(value)),
+        )
+
+
+# Tracking toggle
+
+def set_user_enabled(tiktok_id: str, enabled: bool) -> None:
+    """Set the enabled flag (whether the user appears in the tracked-user list)."""
+    with get_db() as conn:
+        conn.execute(
+            "UPDATE users SET enabled = ? WHERE tiktok_id = ?",
+            (1 if enabled else 0, tiktok_id),
+        )
+
+
+def set_user_tracking_enabled(tiktok_id: str, enabled: bool) -> None:
+    with get_db() as conn:
+        conn.execute(
+            "UPDATE users SET tracking_enabled = ? WHERE tiktok_id = ?",
+            (1 if enabled else 0, tiktok_id),
+        )
+
+
+def set_sound_tracking_enabled(sound_id: str, enabled: bool) -> None:
+    with get_db() as conn:
+        conn.execute(
+            "UPDATE sounds SET tracking_enabled = ? WHERE sound_id = ?",
+            (1 if enabled else 0, sound_id),
         )
 
 
@@ -610,6 +639,14 @@ def update_video_stats(video_id: str, view_count=None, like_count=None,
         """, (view_count, like_count, comment_count, share_count, save_count,
               duration, width, height, music_title, music_artist, raw_video_data,
               int(time.time()), video_id))
+
+
+def delete_video(video_id: str) -> bool:
+    """Hard-delete a video row and its sound junction entries. Returns True if a row was removed."""
+    with get_db() as conn:
+        conn.execute("DELETE FROM sound_videos WHERE video_id = ?", (video_id,))
+        cur = conn.execute("DELETE FROM videos WHERE video_id = ?", (video_id,))
+        return cur.rowcount > 0
 
 
 def get_all_video_ids() -> set:
