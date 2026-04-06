@@ -934,23 +934,25 @@
 
     .settings-section-title { font-size: 16px; font-weight: 700; color: var(--text); margin-bottom: 20px; }
 
-    /* ── Cleanup progress ─────────────────────────────────────────────────────── */
+    /* ── Job progress widget ──────────────────────────────────────────────────── */
 
-    .cleanup-bar-track {
+    .job-bar-track {
       height: 4px; background: var(--surface2); border-radius: 2px;
-      overflow: hidden; margin-top: 16px;
+      overflow: hidden; margin-top: 14px;
     }
-    .cleanup-bar-fill {
-      height: 100%; background: var(--accent); border-radius: 2px;
-      width: 30%; animation: bar-slide 1.2s ease-in-out infinite;
+    .job-bar-fill {
+      height: 100%; background: var(--accent); border-radius: 2px; transition: width .3s;
     }
-    .cleanup-bar-fill.done { width: 100%; animation: none; }
-    @keyframes bar-slide { 0% { margin-left: -30%; } 100% { margin-left: 100%; } }
+    .job-bar-fill.indeterminate {
+      width: 30%; animation: job-bar-slide 1.2s ease-in-out infinite; transition: none;
+    }
+    .job-bar-fill.done { width: 100%; animation: none; }
+    @keyframes job-bar-slide { 0% { margin-left: -30%; } 100% { margin-left: 100%; } }
 
-    .cleanup-current { font-size: 12px; color: var(--muted); margin-top: 8px; min-height: 18px; }
-    .cleanup-step-log { margin-top: 10px; display: flex; flex-direction: column; gap: 3px; }
-    .cleanup-step { font-size: 12px; color: var(--text-dim); }
-    .cleanup-step.done { color: var(--green); }
+    .job-status { margin-top: 12px; }
+    .job-status-text { font-size: 12px; color: var(--muted); margin-top: 6px; min-height: 16px; }
+    .job-steps { margin-top: 8px; display: flex; flex-direction: column; gap: 3px; }
+    .job-step  { font-size: 12px; color: var(--green); }
 
     /* ── Transcoding settings ────────────────────────────────────────────────── */
 
@@ -1245,7 +1247,6 @@
       <div class="settings-nav-item active" id="snav-cookies"   onclick="switchSettingsSection('cookies')">Cookies</div>
       <div class="settings-nav-item"        id="snav-loops"     onclick="switchSettingsSection('loops')">Loops</div>
       <div class="settings-nav-item"        id="snav-backfill"  onclick="switchSettingsSection('backfill')">Backfill</div>
-      <div class="settings-nav-item"        id="snav-database"  onclick="switchSettingsSection('database')">Database</div>
       <div class="settings-nav-item"        id="snav-jobs"      onclick="switchSettingsSection('jobs')">Jobs</div>
       <div class="settings-nav-item"        id="snav-diag"      onclick="switchSettingsSection('diag')">Diagnostics</div>
     </nav>
@@ -1348,22 +1349,6 @@
         </div>
       </div>
 
-      <!-- Database section -->
-      <div id="ssec-database" style="display:none">
-        <div class="settings-section-title">Database</div>
-        <p style="font-size:13px;color:var(--text-dim);line-height:1.5;margin-bottom:20px;">
-          Removes orphaned thumbnails and avatars left behind when users are removed from tracking.
-          Also runs <code style="font-family:var(--mono);font-size:11px;background:var(--surface2);padding:1px 5px;border-radius:4px;">VACUUM</code>
-          on the SQLite database to compact freed space.
-        </p>
-        <button class="btn-primary" id="cleanupBtn" onclick="triggerCleanup()">Run Cleanup</button>
-        <div id="cleanupProgress" style="display:none">
-          <div class="cleanup-bar-track"><div class="cleanup-bar-fill" id="cleanupBarFill"></div></div>
-          <div class="cleanup-current" id="cleanupCurrent"></div>
-          <div class="cleanup-step-log" id="cleanupStepLog"></div>
-        </div>
-      </div>
-
       <!-- Jobs section -->
       <div id="ssec-jobs" style="display:none">
         <div class="settings-section-title">Jobs</div>
@@ -1378,16 +1363,29 @@
                 are skipped. New downloads are saved as AVIF directly.
               </div>
             </div>
-            <button class="btn-primary" id="jobAvifBtn" onclick="triggerAvifJob()" style="flex-shrink:0;align-self:flex-start">Run</button>
+            <button class="btn-primary" id="job-avif-btn" onclick="triggerAvifJob()" style="flex-shrink:0;align-self:flex-start">Run</button>
           </div>
-          <div id="jobAvifProgress">
-            <div class="tc-bar-track" style="margin-top:14px">
-              <div class="tc-bar-fill" id="jobAvifBar" style="width:0%"></div>
+          <div class="job-status" id="job-avif-status" style="display:none">
+            <div id="job-avif-bar-wrap"><div class="job-bar-track"><div class="job-bar-fill" id="job-avif-bar"></div></div></div>
+            <div class="job-status-text" id="job-avif-text"></div>
+          </div>
+        </div>
+
+        <div class="job-card">
+          <div class="job-card-hdr">
+            <div style="flex:1">
+              <div class="job-card-title">Database cleanup</div>
+              <div class="job-card-desc">
+                Removes orphaned thumbnails and avatars left behind when users are removed
+                from tracking. Also runs VACUUM on the SQLite database to compact freed space.
+              </div>
             </div>
-            <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--muted);margin-top:4px;">
-              <span id="jobAvifPhase"></span>
-              <span><span id="jobAvifCount"></span> <span id="jobAvifPct" style="font-weight:600"></span></span>
-            </div>
+            <button class="btn-primary" id="job-cleanup-btn" onclick="triggerCleanup()" style="flex-shrink:0;align-self:flex-start">Run</button>
+          </div>
+          <div class="job-status" id="job-cleanup-status" style="display:none">
+            <div id="job-cleanup-bar-wrap"><div class="job-bar-track"><div class="job-bar-fill" id="job-cleanup-bar"></div></div></div>
+            <div class="job-status-text" id="job-cleanup-text"></div>
+            <div class="job-steps" id="job-cleanup-steps"></div>
           </div>
         </div>
 
@@ -1401,9 +1399,12 @@
                 file from disk and removes its database entry. Safe to run multiple times.
               </div>
             </div>
-            <button class="btn-danger" id="jobAudioBtn" onclick="triggerAudioCleanup()" style="flex-shrink:0;align-self:flex-start">Run</button>
+            <button class="btn-danger" id="job-audio-btn" onclick="triggerAudioCleanup()" style="flex-shrink:0;align-self:flex-start">Run</button>
           </div>
-          <div id="jobAudioResult" style="font-size:12px;color:var(--muted);margin-top:10px;display:none"></div>
+          <div class="job-status" id="job-audio-status" style="display:none">
+            <div id="job-audio-bar-wrap"><div class="job-bar-track"><div class="job-bar-fill" id="job-audio-bar"></div></div></div>
+            <div class="job-status-text" id="job-audio-text"></div>
+          </div>
         </div>
       </div>
 
@@ -1838,127 +1839,159 @@
 
   function switchSettingsSection(name) {
     _settingsSection = name;
-    ['cookies', 'loops', 'backfill', 'database', 'jobs', 'diag'].forEach(s => {
+    ['cookies', 'loops', 'backfill', 'jobs', 'diag'].forEach(s => {
       document.getElementById(`ssec-${s}`).style.display    = s === name ? '' : 'none';
       document.getElementById(`snav-${s}`).classList.toggle('active', s === name);
     });
     if (name === 'loops') { loadSettings(); }
-    if (name === 'jobs')  { _jobsLoadStatus(); _startJobsPoll(); }
+    if (name === 'jobs')  { _avifLoadStatus(); _startJobsPoll(); }
     else                  { _stopJobsPoll(); }
     if (name === 'diag')  { diagSourceChanged(); }
   }
 
-  // ── Database cleanup ──────────────────────────────────────────────────────────
+  // ── Job progress widget ───────────────────────────────────────────────────────
+  //
+  // _makeJobWidget(id) — returns { update({barPct, label, steps}), hide() }
+  //
+  // barPct: null  = indeterminate animated bar
+  //         0–100 = determinate bar (100 snaps to .done state)
+  //         undefined = no bar shown
+  // label:  status text shown below the bar
+  // steps:  array of completed-step strings (optional; shown as green lines)
 
+  function _makeJobWidget(id) {
+    const statusEl = document.getElementById(`job-${id}-status`);
+    const barWrap  = document.getElementById(`job-${id}-bar-wrap`);
+    const barEl    = document.getElementById(`job-${id}-bar`);
+    const textEl   = document.getElementById(`job-${id}-text`);
+    const stepsEl  = document.getElementById(`job-${id}-steps`);
+    return {
+      update({ barPct, label, steps } = {}) {
+        statusEl.style.display = '';
+        const hasBar = barPct !== undefined;
+        if (barWrap) barWrap.style.display = hasBar ? '' : 'none';
+        if (barEl && hasBar) {
+          if (barPct === null) {
+            barEl.className = 'job-bar-fill indeterminate';
+            barEl.style.width = '';
+          } else {
+            barEl.className = `job-bar-fill${barPct >= 100 ? ' done' : ''}`;
+            barEl.style.width = Math.min(barPct, 100) + '%';
+          }
+        }
+        if (textEl) textEl.textContent = label ?? '';
+        if (stepsEl) stepsEl.innerHTML = (steps || []).map(s => `<div class="job-step">${esc(s)}</div>`).join('');
+      },
+      hide() { statusEl.style.display = 'none'; },
+    };
+  }
+
+  // ── Jobs ──────────────────────────────────────────────────────────────────────
+
+  let _jobsPoll    = null;
   let _cleanupPoll = null;
+  let _audioPoll   = null;
 
-  async function triggerCleanup() {
-    const btn = document.getElementById('cleanupBtn');
-    btn.disabled = true;
-    const { ok, data } = await apiJSON('/api/db/cleanup', { method: 'POST' });
-    if (!ok) {
-      alert(data.error || 'Could not start cleanup');
-      btn.disabled = false;
-      return;
-    }
-    _showCleanupProgress();
-    _startCleanupPoll();
-  }
+  const _avifWidget    = _makeJobWidget('avif');
+  const _cleanupWidget = _makeJobWidget('cleanup');
+  const _audioWidget   = _makeJobWidget('audio');
 
-  function _showCleanupProgress() {
-    document.getElementById('cleanupProgress').style.display = '';
-    document.getElementById('cleanupBarFill').classList.remove('done');
-    document.getElementById('cleanupCurrent').textContent = '';
-    document.getElementById('cleanupStepLog').innerHTML = '';
-  }
-
-  function _startCleanupPoll() {
-    if (_cleanupPoll) return;
-    _cleanupPoll = setInterval(async () => {
-      const { ok, data } = await apiJSON('/api/db/cleanup');
-      if (!ok) return;
-      const btn    = document.getElementById('cleanupBtn');
-      const curEl  = document.getElementById('cleanupCurrent');
-      const logEl  = document.getElementById('cleanupStepLog');
-      const barEl  = document.getElementById('cleanupBarFill');
-
-      curEl.textContent = data.current || '';
-      logEl.innerHTML = (data.steps || []).map(s =>
-        `<div class="cleanup-step done">${esc(s)}</div>`
-      ).join('');
-
-      if (!data.running) {
-        clearInterval(_cleanupPoll);
-        _cleanupPoll = null;
-        btn.disabled = false;
-        barEl.classList.add('done');
-        curEl.textContent = `Done — ${data.removed} item${data.removed !== 1 ? 's' : ''} removed`;
-      }
-    }, 800);
-  }
-
-  // ── Jobs settings ─────────────────────────────────────────────────────────────
-
-  let _jobsPoll = null;
+  // AVIF converter
 
   const _PHASE_LABELS = { startup: 'Checking…', counting: 'Counting…', photos: 'Photo posts…', thumbnails: 'Thumbnails…', avatars: 'Avatars…' };
 
-  async function _jobsLoadStatus() {
+  async function _avifLoadStatus() {
     const { ok, data } = await apiJSON('/api/jobs/photo-converter/status');
     if (!ok) return;
-
-    const btn     = document.getElementById('jobAvifBtn');
-    const barEl   = document.getElementById('jobAvifBar');
-    const phaseEl = document.getElementById('jobAvifPhase');
-    const countEl = document.getElementById('jobAvifCount');
-    const pctEl   = document.getElementById('jobAvifPct');
-
+    const btn = document.getElementById('job-avif-btn');
     const isPending = data.phase === 'startup';
     btn.disabled = data.running || isPending;
-
     const total = data.total || 0;
     const done  = data.done  || 0;
     const pct   = total > 0 ? Math.round(done / total * 100) : (data.running || isPending ? 0 : 100);
-
-    barEl.style.width = pct + '%';
-
-    if (data.running) {
-      phaseEl.textContent = _PHASE_LABELS[data.phase] || '';
-      countEl.textContent = total > 0 ? `${done.toLocaleString()} / ${total.toLocaleString()}` : '';
-      pctEl.textContent   = total > 0 ? `${pct}%` : '';
+    if (data.running || isPending) {
+      const count = total > 0 ? `${done.toLocaleString()} / ${total.toLocaleString()} (${pct}%)` : '';
+      _avifWidget.update({ barPct: pct, label: [_PHASE_LABELS[data.phase] || '', count].filter(Boolean).join('  ') });
     } else if (done > 0 || data.errors > 0) {
       const parts = [];
-      if (done > 0)         parts.push(`${done.toLocaleString()} converted`);
-      if (data.errors > 0)  parts.push(`${data.errors} error${data.errors !== 1 ? 's' : ''}`);
-      phaseEl.textContent = parts.join(' · ');
-      countEl.textContent = '';
-      pctEl.textContent   = '';
+      if (done > 0)        parts.push(`${done.toLocaleString()} converted`);
+      if (data.errors > 0) parts.push(`${data.errors} error${data.errors !== 1 ? 's' : ''}`);
+      _avifWidget.update({ barPct: 100, label: parts.join(' · ') });
     } else {
-      phaseEl.textContent = _PHASE_LABELS[data.phase]
-        || (total === 0 ? 'All images already in AVIF.' : '');
-      countEl.textContent = '';
-      pctEl.textContent   = '';
+      _avifWidget.update({ barPct: 100, label: total === 0 ? 'All images already in AVIF.' : '' });
     }
-
     if (!data.running && !isPending) _stopJobsPoll();
   }
 
   async function triggerAvifJob() {
-    const btn = document.getElementById('jobAvifBtn');
+    const btn = document.getElementById('job-avif-btn');
     btn.disabled = true;
     const { ok, data } = await apiJSON('/api/jobs/photo-converter/start', { method: 'POST' });
     if (!ok) { alert(data.error || 'Failed to start'); btn.disabled = false; return; }
-    _jobsLoadStatus();
+    _avifLoadStatus();
     _startJobsPoll();
   }
 
   function _startJobsPoll() {
     if (_jobsPoll) return;
-    _jobsPoll = setInterval(_jobsLoadStatus, 1500);
+    _jobsPoll = setInterval(_avifLoadStatus, 1500);
   }
-
   function _stopJobsPoll() {
     if (_jobsPoll) { clearInterval(_jobsPoll); _jobsPoll = null; }
+  }
+
+  // Database cleanup
+
+  async function triggerCleanup() {
+    const btn = document.getElementById('job-cleanup-btn');
+    btn.disabled = true;
+    const { ok, data } = await apiJSON('/api/db/cleanup', { method: 'POST' });
+    if (!ok) { alert(data.error || 'Could not start cleanup'); btn.disabled = false; return; }
+    _cleanupWidget.update({ barPct: null, label: 'Running…' });
+    if (_cleanupPoll) return;
+    _cleanupPoll = setInterval(async () => {
+      const { ok, data } = await apiJSON('/api/db/cleanup');
+      if (!ok) return;
+      if (data.running) {
+        _cleanupWidget.update({ barPct: null, label: data.current || 'Running…', steps: data.steps });
+      } else {
+        clearInterval(_cleanupPoll); _cleanupPoll = null;
+        document.getElementById('job-cleanup-btn').disabled = false;
+        _cleanupWidget.update({
+          barPct: 100,
+          label: `Done — ${data.removed} item${data.removed !== 1 ? 's' : ''} removed`,
+          steps: data.steps,
+        });
+      }
+    }, 800);
+  }
+
+  // Audio cleanup
+
+  async function triggerAudioCleanup() {
+    const btn = document.getElementById('job-audio-btn');
+    btn.disabled = true;
+    const { ok, data } = await apiJSON('/api/jobs/audio-cleanup/start', { method: 'POST' });
+    if (!ok) { alert(data.error || 'Failed to start'); btn.disabled = false; return; }
+    _audioWidget.update({ barPct: null, label: 'Running…' });
+    if (_audioPoll) return;
+    _audioPoll = setInterval(async () => {
+      const { ok, data } = await apiJSON('/api/jobs/audio-cleanup/status');
+      if (!ok) return;
+      if (data.running) {
+        _audioWidget.update({ barPct: null, label: `Running… ${data.deleted} deleted, ${data.db_removed} removed from DB` });
+      } else if (data.last_run) {
+        clearInterval(_audioPoll); _audioPoll = null;
+        document.getElementById('job-audio-btn').disabled = false;
+        if (data.found === 0) {
+          _audioWidget.update({ label: 'No audio files found.' });
+        } else {
+          const parts = [`Found ${data.found}`, `deleted ${data.deleted}`, `removed ${data.db_removed} from DB`];
+          if (data.errors) parts.push(`${data.errors} error${data.errors !== 1 ? 's' : ''}`);
+          _audioWidget.update({ label: parts.join(' · ') + ` — ${data.last_run}` });
+        }
+      }
+    }, 1000);
   }
 
   // ── Diagnostics ────────────────────────────────────────────────────────────────
@@ -2018,48 +2051,6 @@
     });
   }
 
-  // ── Audio cleanup job ──────────────────────────────────────────────────────────
-
-  let _audioCleanupPoll = null;
-
-  async function triggerAudioCleanup() {
-    const btn    = document.getElementById('jobAudioBtn');
-    const result = document.getElementById('jobAudioResult');
-    btn.disabled = true;
-    result.style.display = 'none';
-    const { ok, data } = await apiJSON('/api/jobs/audio-cleanup/start', { method: 'POST' });
-    if (!ok) { alert(data.error || 'Failed to start'); btn.disabled = false; return; }
-    _startAudioCleanupPoll();
-  }
-
-  function _startAudioCleanupPoll() {
-    if (_audioCleanupPoll) return;
-    _audioCleanupPoll = setInterval(_audioCleanupLoadStatus, 1000);
-  }
-
-  async function _audioCleanupLoadStatus() {
-    const { ok, data } = await apiJSON('/api/jobs/audio-cleanup/status');
-    if (!ok) return;
-
-    const btn    = document.getElementById('jobAudioBtn');
-    const result = document.getElementById('jobAudioResult');
-
-    if (data.running) {
-      result.style.display = 'block';
-      result.textContent = `Running… ${data.deleted} deleted, ${data.db_removed} removed from DB`;
-    } else if (data.last_run) {
-      if (_audioCleanupPoll) { clearInterval(_audioCleanupPoll); _audioCleanupPoll = null; }
-      btn.disabled = false;
-      result.style.display = 'block';
-      if (data.found === 0) {
-        result.textContent = 'No audio files found.';
-      } else {
-        const parts = [`Found ${data.found}`, `deleted ${data.deleted}`, `removed ${data.db_removed} from DB`];
-        if (data.errors) parts.push(`${data.errors} error${data.errors !== 1 ? 's' : ''}`);
-        result.textContent = parts.join(' · ') + ` — ${data.last_run}`;
-      }
-    }
-  }
 
   // ── Users ─────────────────────────────────────────────────────────────────────
 
