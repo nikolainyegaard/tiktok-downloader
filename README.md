@@ -19,7 +19,7 @@ The **user loop** runs on its own schedule. Each iteration:
    - Compares it against the database
    - Downloads any new videos via yt-dlp, embedding metadata into the file; photo posts are downloaded as individual AVIF images
    - Tracks videos that have disappeared. After 3 consecutive loop runs without the video appearing, it is marked as deleted
-   - Detects banned or removed accounts immediately (TikTok API status 10202). All active videos are marked deleted. If the account becomes reachable again in a future run, those videos are automatically restored
+   - Detects banned or removed accounts immediately (TikTok API status 10202). All active videos are marked deleted. If the account becomes reachable again in a future run, those videos are automatically restored. Accounts that stay banned for 14 consecutive days are automatically set to inactive so they stop being checked each loop
    - Immediately marks any previously-deleted videos as restored if they reappear
 
 The first run for an account with many videos will take a while. Subsequent runs are fast.
@@ -127,7 +127,7 @@ Click anywhere on a user card (other than the Run/Remove/toggle buttons) to open
 - **Click a thumbnail** to preview the image full-size in an overlay.
 - **Click the ▶ button** (video posts only) to play the video directly in the browser.
 
-The **Recent** panel on the main page shows the last few deleted videos, profile changes, and bans. Click any entry to jump straight to the relevant user and video. Click a section heading (e.g. "Recently deleted") to open a full scrollable log of all historical events of that type.
+The **Recent** panel on the main page shows the last few deleted videos, profile changes, bans, and recently saved videos. In the Recently Saved section, consecutive downloads from the same user are grouped into a single row (e.g. "@user 12x"). Click any entry to jump to that user. Click a section heading (e.g. "Recently deleted") to open a full scrollable log of all historical events of that type.
 
 If you have videos downloaded before v1.5.0, their engagement stats and technical metadata will be missing. The header shows how many videos need backfilling (e.g. `942 missing`). Click **Backfill Stats** to fetch the missing data from TikTok without re-downloading any files — this covers views, likes, comments, shares, saves, duration, dimensions, and music info. Progress is shown inline; the operation runs in the background and does not interrupt the download loop. Videos downloaded with the current version are never eligible for backfill as all fields are captured at download time.
 

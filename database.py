@@ -745,10 +745,30 @@ def get_recent_activity() -> dict:
                ORDER BY banned_at DESC LIMIT 1"""
         ).fetchall()]
         saved = [dict(r) for r in conn.execute(
-            """SELECT v.video_id, v.download_date, v.type, u.username, u.tiktok_id
-               FROM videos v JOIN users u ON u.tiktok_id = v.tiktok_id
-               WHERE v.download_date IS NOT NULL AND v.file_path IS NOT NULL
-               ORDER BY v.download_date DESC LIMIT 9"""
+            """WITH recent AS (
+                   SELECT v.download_date, u.username, u.tiktok_id
+                   FROM videos v JOIN users u ON u.tiktok_id = v.tiktok_id
+                   WHERE v.download_date IS NOT NULL AND v.file_path IS NOT NULL
+                   ORDER BY v.download_date DESC LIMIT 2000
+               ),
+               ranked AS (
+                   SELECT *,
+                       ROW_NUMBER() OVER (ORDER BY download_date DESC) AS grn,
+                       ROW_NUMBER() OVER (PARTITION BY tiktok_id ORDER BY download_date DESC) AS urn
+                   FROM recent
+               ),
+               groups AS (
+                   SELECT tiktok_id, username,
+                          MAX(download_date) AS download_date,
+                          COUNT(*) AS count,
+                          MIN(grn) AS first_row
+                   FROM ranked
+                   GROUP BY tiktok_id, grn - urn
+               )
+               SELECT tiktok_id, username, download_date, count
+               FROM groups
+               ORDER BY first_row
+               LIMIT 9"""
         ).fetchall()]
     return {"deletions": deletions, "profile_changes": profile_changes, "bans": bans, "saved": saved}
 
@@ -791,17 +811,46 @@ def get_ban_history(offset: int = 0, limit: int = 50) -> list[dict]:
     return [dict(r) for r in rows]
 
 
-def get_saved_history(offset: int = 0, limit: int = 50) -> list[dict]:
-    """Return paginated download history (newest first)."""
+_SAVED_SCAN = 2500  # raw rows scanned per page; generous enough to yield ≥50 groups
+
+def get_saved_history(offset: int = 0, limit: int = 50) -> dict:
+    """Return paginated grouped download history (newest first).
+
+    Consecutive downloads by the same user are collapsed into one group.
+    Returns {"items": [...groups...], "rows_consumed": N} where rows_consumed
+    is the total raw rows spanned by the returned groups — the caller should
+    advance its raw-row offset by this value for the next page.
+    """
     with get_db() as conn:
         rows = conn.execute(
-            """SELECT v.video_id, v.download_date, v.type, u.username, u.tiktok_id
-               FROM videos v JOIN users u ON u.tiktok_id = v.tiktok_id
-               WHERE v.download_date IS NOT NULL AND v.file_path IS NOT NULL
-               ORDER BY v.download_date DESC LIMIT ? OFFSET ?""",
-            (limit, offset),
+            """WITH recent AS (
+                   SELECT v.download_date, u.username, u.tiktok_id
+                   FROM videos v JOIN users u ON u.tiktok_id = v.tiktok_id
+                   WHERE v.download_date IS NOT NULL AND v.file_path IS NOT NULL
+                   ORDER BY v.download_date DESC LIMIT ? OFFSET ?
+               ),
+               ranked AS (
+                   SELECT *,
+                       ROW_NUMBER() OVER (ORDER BY download_date DESC) AS grn,
+                       ROW_NUMBER() OVER (PARTITION BY tiktok_id ORDER BY download_date DESC) AS urn
+                   FROM recent
+               ),
+               groups AS (
+                   SELECT tiktok_id, username,
+                          MAX(download_date) AS download_date,
+                          COUNT(*) AS count,
+                          MIN(grn) AS first_row
+                   FROM ranked
+                   GROUP BY tiktok_id, grn - urn
+               )
+               SELECT tiktok_id, username, download_date, count
+               FROM groups
+               ORDER BY first_row
+               LIMIT ?""",
+            (_SAVED_SCAN, offset, limit),
         ).fetchall()
-    return [dict(r) for r in rows]
+    groups = [dict(r) for r in rows]
+    return {"items": groups, "rows_consumed": sum(g["count"] for g in groups)}
 
 
 def get_aggregate_stats() -> dict:

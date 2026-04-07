@@ -898,7 +898,7 @@
     /* Recent panel entries */
     .recent-entry {
       display: grid;
-      grid-template-columns: auto 1fr auto;
+      grid-template-columns: 95px 1fr 70px;
       gap: 6px;
       align-items: baseline;
       font-size: 12px;
@@ -907,9 +907,9 @@
       cursor: pointer;
     }
     .recent-entry:hover { background: var(--surface2); }
-    .recent-date   { font-size: 11px; color: var(--muted); white-space: nowrap; }
+    .recent-date   { font-size: 11px; color: var(--muted); white-space: nowrap; overflow: hidden; }
     .recent-name   { color: var(--accent); font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    .recent-detail { font-size: 11px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-family: var(--mono); }
+    .recent-detail { font-size: 11px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-family: var(--mono); text-align: right; }
     .recent-empty  { font-size: 11px; color: var(--muted); padding: 2px 6px; }
     .recent-section-hdr {
       font-size: 10px; font-weight: 700; letter-spacing: .07em;
@@ -1884,7 +1884,7 @@
         `<div class="recent-entry" onclick="openUserModalAndHighlight('${esc(d.tiktok_id)}','${esc(d.video_id)}')" title="Open @${esc(d.username)}">
           <span class="recent-date">${_recentDate(d.deleted_at)}</span>
           <span class="recent-name">@${esc(d.username)}</span>
-          <span class="recent-detail">${esc(d.video_id)}</span>
+          <span class="recent-detail">${esc(d.video_id.slice(0, 10))}\u2026</span>
         </div>`
       ).join('');
     } else {
@@ -1931,11 +1931,11 @@
     right += `<div>`;
     right += `<div class="recent-section-hdr" style="margin-bottom:2px" onclick="openRecentLog('saved')" title="View all saved videos">Recently saved</div>`;
     if (data.saved && data.saved.length) {
-      right += data.saved.map(s =>
-        `<div class="recent-entry" onclick="openUserModalAndHighlight('${esc(s.tiktok_id)}','${esc(s.video_id)}','all','download_date','desc')" title="Open @${esc(s.username)}">
-          <span class="recent-date">${_recentDate(s.download_date)}</span>
-          <span class="recent-name">@${esc(s.username)}</span>
-          <span class="recent-detail">${esc(s.video_id)}${s.type === 'photo' ? ' <span style="color:var(--muted)">[photo]</span>' : ''}</span>
+      right += data.saved.map(g =>
+        `<div class="recent-entry" onclick="openUserModal('${esc(g.tiktok_id)}')" title="Open @${esc(g.username)}">
+          <span class="recent-date">${_recentDate(g.download_date)}</span>
+          <span class="recent-name">@${esc(g.username)}</span>
+          <span class="recent-detail">${g.count}x</span>
         </div>`
       ).join('');
     } else {
@@ -1960,17 +1960,19 @@
     'saved':           'All Saved Videos',
   };
 
-  let _recentLogType    = null;
-  let _recentLogOffset  = 0;
-  let _recentLogDone    = false;
-  let _recentLogLoading = false;
-  let _recentLogObs     = null;
+  let _recentLogType      = null;
+  let _recentLogOffset    = 0;
+  let _recentLogDone      = false;
+  let _recentLogLoading   = false;
+  let _recentLogObs       = null;
+  let _recentLogLastGroup = null; // cross-batch stitch for 'saved' collapsing
 
   function openRecentLog(type) {
-    _recentLogType    = type;
-    _recentLogOffset  = 0;
-    _recentLogDone    = false;
-    _recentLogLoading = false;
+    _recentLogType      = type;
+    _recentLogOffset    = 0;
+    _recentLogDone      = false;
+    _recentLogLoading   = false;
+    _recentLogLastGroup = null;
 
     document.getElementById('recentLogTitle').textContent = _RECENT_LOG_TITLES[type] || type;
     document.getElementById('recentLogBody').innerHTML = '';
@@ -1985,6 +1987,7 @@
   function closeRecentLog() {
     document.getElementById('recentLogBackdrop').style.display = 'none';
     if (_recentLogObs) { _recentLogObs.disconnect(); _recentLogObs = null; }
+    _recentLogLastGroup = null;
     _recentLogType    = null;
     _recentLogLoading = false;
   }
@@ -2007,49 +2010,73 @@
     const url = `/api/recent/${_recentLogType}?offset=${_recentLogOffset}&limit=50`;
     const { ok, data } = await apiJSON(url);
     if (!ok || !_recentLogType) { _recentLogLoading = false; return; }
-    if (!data.length) { _recentLogDone = true; _recentLogLoading = false; return; }
-    _recentLogOffset += data.length;
-    if (data.length < 50) _recentLogDone = true;
+
+    // 'saved' returns {items, rows_consumed}; all other types return a plain array.
+    const items   = _recentLogType === 'saved' ? data.items        : data;
+    const advance = _recentLogType === 'saved' ? data.rows_consumed : data.length;
+
+    if (!items.length) { _recentLogDone = true; _recentLogLoading = false; return; }
+    _recentLogOffset += advance;
+    if (items.length < 50) _recentLogDone = true;
 
     const body = document.getElementById('recentLogBody');
     const sentinel = document.getElementById('recentLogSentinel');
     const frag = document.createDocumentFragment();
 
-    data.forEach(item => {
-      const row = document.createElement('div');
-      row.className = 'recent-entry';
-      if (_recentLogType === 'deletions') {
-        row.title = `Open @${item.username}`;
-        row.onclick = () => { closeRecentLog(); openUserModalAndHighlight(item.tiktok_id, item.video_id); };
-        row.innerHTML = `
-          <span class="recent-date">${_recentDate(item.deleted_at)}</span>
-          <span class="recent-name">@${esc(item.username)}</span>
-          <span class="recent-detail">${esc(item.video_id)}</span>`;
-      } else if (_recentLogType === 'profile-changes') {
-        const label = _FIELD_LABELS[item.field] || item.field;
-        row.title = `Open @${item.username} · ${label} history`;
-        row.onclick = () => { closeRecentLog(); openUserModalWithHistory(item.tiktok_id, item.field); };
-        row.innerHTML = `
-          <span class="recent-date">${_recentDate(item.changed_at)}</span>
-          <span class="recent-name">@${esc(item.username)}</span>
-          <span class="recent-detail">${esc(label)}</span>`;
-      } else if (_recentLogType === 'saved') {
-        row.title = `Open @${item.username}`;
-        row.onclick = () => { closeRecentLog(); openUserModalAndHighlight(item.tiktok_id, item.video_id, 'all', 'download_date', 'desc'); };
-        row.innerHTML = `
-          <span class="recent-date">${_recentDate(item.download_date)}</span>
-          <span class="recent-name">@${esc(item.username)}</span>
-          <span class="recent-detail">${esc(item.video_id)}${item.type === 'photo' ? ' <span style="color:var(--muted)">[photo]</span>' : ''}</span>`;
-      } else {
-        row.title = `Open @${item.username}`;
-        row.onclick = () => { closeRecentLog(); openUserModal(item.tiktok_id); };
-        row.innerHTML = `
-          <span class="recent-date">${_recentDate(item.banned_at)}</span>
-          <span class="recent-name">@${esc(item.username)}</span>
-          <span class="recent-detail" style="color:var(--red)">Banned</span>`;
+    if (_recentLogType === 'saved') {
+      // Server returns pre-grouped consecutive runs; stitch across batch boundaries.
+      let i = 0;
+      if (_recentLogLastGroup && items.length > 0 && _recentLogLastGroup.tiktok_id === items[0].tiktok_id) {
+        // First group of this batch continues the last group of the previous batch.
+        const merged = _recentLogLastGroup.count + items[0].count;
+        _recentLogLastGroup.count = merged;
+        const detailEl = _recentLogLastGroup.el.querySelector('.recent-detail');
+        if (detailEl) detailEl.textContent = `${merged}x`;
+        i = 1;
       }
-      frag.appendChild(row);
-    });
+      for (; i < items.length; i++) {
+        const g = items[i];
+        const row = document.createElement('div');
+        row.className = 'recent-entry';
+        row.title = `Open @${g.username}`;
+        row.onclick = () => { closeRecentLog(); openUserModal(g.tiktok_id); };
+        row.innerHTML = `
+          <span class="recent-date">${_recentDate(g.download_date)}</span>
+          <span class="recent-name">@${esc(g.username)}</span>
+          <span class="recent-detail">${g.count}x</span>`;
+        frag.appendChild(row);
+        _recentLogLastGroup = { tiktok_id: g.tiktok_id, el: row, count: g.count };
+      }
+    } else {
+      data.forEach(item => {
+        const row = document.createElement('div');
+        row.className = 'recent-entry';
+        if (_recentLogType === 'deletions') {
+          row.title = `Open @${item.username}`;
+          row.onclick = () => { closeRecentLog(); openUserModalAndHighlight(item.tiktok_id, item.video_id); };
+          row.innerHTML = `
+            <span class="recent-date">${_recentDate(item.deleted_at)}</span>
+            <span class="recent-name">@${esc(item.username)}</span>
+            <span class="recent-detail">${esc(item.video_id.slice(0, 10))}\u2026</span>`;
+        } else if (_recentLogType === 'profile-changes') {
+          const label = _FIELD_LABELS[item.field] || item.field;
+          row.title = `Open @${item.username} · ${label} history`;
+          row.onclick = () => { closeRecentLog(); openUserModalWithHistory(item.tiktok_id, item.field); };
+          row.innerHTML = `
+            <span class="recent-date">${_recentDate(item.changed_at)}</span>
+            <span class="recent-name">@${esc(item.username)}</span>
+            <span class="recent-detail">${esc(label)}</span>`;
+        } else {
+          row.title = `Open @${item.username}`;
+          row.onclick = () => { closeRecentLog(); openUserModal(item.tiktok_id); };
+          row.innerHTML = `
+            <span class="recent-date">${_recentDate(item.banned_at)}</span>
+            <span class="recent-name">@${esc(item.username)}</span>
+            <span class="recent-detail" style="color:var(--red)">Banned</span>`;
+        }
+        frag.appendChild(row);
+      });
+    }
 
     body.insertBefore(frag, sentinel);
     _recentLogLoading = false;
@@ -2066,9 +2093,17 @@
   }
 
   function closeSettings() {
+    // Capture running state before _stopJobsPoll() nulls out _jobsPoll
+    const avifRunning = _jobsPoll !== null;
+    _stopJobsPoll();
     document.getElementById('settingsBackdrop').style.display = 'none';
     document.body.style.overflow = '';
-    _stopJobsPoll();
+    // Clear finished job widgets so reopening the panel shows a clean state
+    if (!avifRunning)    { _avifWidget.hide();     document.getElementById('job-avif-btn').disabled     = false; }
+    if (!_cleanupPoll)   { _cleanupWidget.hide();  document.getElementById('job-cleanup-btn').disabled  = false; }
+    if (!_audioPoll)     { _audioWidget.hide();     document.getElementById('job-audio-btn').disabled    = false; }
+    if (!_filecheckPoll) { _filecheckWidget.hide(); _filecheckReport.hide(); _setFilecheckBtns(false); }
+    if (!_backfillPoll)  { document.getElementById('backfillStatus').textContent = ''; }
   }
 
   function switchSettingsSection(name) {
