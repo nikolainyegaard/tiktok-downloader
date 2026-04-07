@@ -2,18 +2,17 @@
 Background AVIF conversion for all image assets.
 
 Converts existing JPEG files to AVIF in three passes:
-  1. Photo post images  — videos/@username/{video_id}_NN.jpg  → .avif
-  2. Thumbnails         — videos/@username/thumbs/{video_id}.jpg → .avif
-  3. Profile avatars    — data/avatars/{tiktok_id}[_ts].jpg   → .avif
+  1. Photo post images:  videos/@username/{video_id}_NN.jpg  -> .avif
+  2. Thumbnails:         videos/@username/thumbs/{video_id}.jpg -> .avif
+  3. Profile avatars:    data/avatars/{tiktok_id}[_ts].jpg   -> .avif
 
-Runs automatically at startup and skips already-converted files, so it is
-safe to restart mid-run — it will pick up where it left off.
-Also callable on demand via the Jobs settings panel.
+Runs automatically at startup; already-converted files are skipped so it is
+safe to restart mid-run. Also callable on demand via the Jobs settings panel.
 
 CRF values (libaom-av1; lower = better quality / larger file):
-  CRF_PHOTO  = 30  — photo post content (people view these full-size)
-  CRF_THUMB  = 40  — grid thumbnails (small UI elements)
-  CRF_AVATAR = 35  — profile avatars
+  CRF_PHOTO  = 30  (photo post images)
+  CRF_THUMB  = 40  (grid thumbnails)
+  CRF_AVATAR = 35  (profile avatars)
 """
 
 from __future__ import annotations

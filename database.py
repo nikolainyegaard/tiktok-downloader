@@ -24,7 +24,7 @@ def get_db():
 
 def init_db():
     os.makedirs(DATA_DIR, exist_ok=True)
-    # WAL mode is a persistent property — set it once here rather than on every connection.
+    # WAL is a persistent property; set it once rather than on every connection.
     _conn = sqlite3.connect(DB_PATH)
     try:
         _conn.execute("PRAGMA journal_mode=WAL")
@@ -394,7 +394,7 @@ def get_videos_for_user(tiktok_id):
 
 
 def get_all_videos() -> list[dict]:
-    """Return all video rows — used by the thumbnail backfill scan."""
+    """Return all video rows (used by the thumbnail backfill scan)."""
     with get_db() as conn:
         return [dict(r) for r in conn.execute(
             "SELECT video_id, tiktok_id, type, file_path FROM videos"
@@ -471,6 +471,28 @@ def clear_user_pending_ban(tiktok_id: str):
         )
 
 
+def get_sound_active_video_ids(sound_id: str) -> set:
+    """Video IDs linked to a sound that are currently active (up or undeleted)."""
+    with get_db() as conn:
+        rows = conn.execute("""
+            SELECT v.video_id FROM videos v
+            JOIN sound_videos sv ON v.video_id = sv.video_id
+            WHERE sv.sound_id = ? AND v.status IN ('up', 'undeleted')
+        """, (sound_id,)).fetchall()
+    return {r["video_id"] for r in rows}
+
+
+def get_sound_pending_deletion_video_ids(sound_id: str) -> set:
+    """Video IDs linked to a sound that have a pending deletion counter."""
+    with get_db() as conn:
+        rows = conn.execute("""
+            SELECT v.video_id FROM videos v
+            JOIN sound_videos sv ON v.video_id = sv.video_id
+            WHERE sv.sound_id = ? AND v.pending_deletion_count > 0
+        """, (sound_id,)).fetchall()
+    return {r["video_id"] for r in rows}
+
+
 def get_pending_deletion_video_ids(tiktok_id: str) -> set:
     with get_db() as conn:
         rows = conn.execute(
@@ -524,8 +546,7 @@ def get_all_username_history() -> dict:
 
 
 def migrate_username_history_to_profile_history() -> int:
-    """One-time migration: copy username_history rows into profile_history.
-    Safe to run multiple times — skips rows already present (matched on tiktok_id + old_value + changed_at)."""
+    """Copy username_history rows into profile_history. Safe to run multiple times (skips rows already present)."""
     with get_db() as conn:
         conn.execute("""
             INSERT INTO profile_history (tiktok_id, field, old_value, changed_at)
@@ -808,6 +829,19 @@ def reset_backfill_status() -> int:
         return cur.rowcount
 
 
+def reset_backfill_errors() -> int:
+    """Clear stats_error_count and stats_last_error for all permanently-failed videos,
+    making them eligible for the next backfill run. Returns the number of rows affected."""
+    with get_db() as conn:
+        cur = conn.execute(
+            """UPDATE videos
+               SET stats_error_count = 0, stats_last_error = NULL
+               WHERE COALESCE(stats_error_count, 0) >= ?""",
+            (_STATS_ERROR_THRESHOLD,),
+        )
+        return cur.rowcount
+
+
 # Sound tracking
 
 def add_sound(sound_id: str, label: str | None = None) -> bool:
@@ -951,11 +985,9 @@ def update_video_file_path(video_id: str, file_path: str) -> None:
 
 
 def migrate_del_prefix() -> int:
-    """One-time migration: remove the del_ filename prefix from any video files still
-    carrying it on disk, and correct the matching file_path values in the database.
-
-    Safe to run multiple times — videos without a del_-prefixed file_path are skipped.
-    Returns the number of video records updated.
+    """Remove the del_ filename prefix from video files on disk and update file_path in the DB.
+    Safe to run multiple times; skips videos without a del_-prefixed path.
+    Returns the number of records updated.
     """
     with get_db() as conn:
         rows = conn.execute(

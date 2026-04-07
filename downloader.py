@@ -111,7 +111,7 @@ def download_video(*, video_id: str, username: str, tiktok_id: str,
     # audio files.  Storing them as videos would pollute the library.
     _audio_exts = (".mp3", ".m4a", ".m4b", ".aac", ".ogg", ".wav", ".flac", ".opus")
     if actual_path.lower().endswith(_audio_exts):
-        print(f"[{_ts()}] Rejected audio-only file for {video_id} ({os.path.basename(actual_path)}) — removing.")
+        print(f"[{_ts()}] Rejected audio-only file for {video_id} ({os.path.basename(actual_path)}), removing.")
         os.remove(actual_path)
         return None
 
@@ -122,7 +122,7 @@ def download_video(*, video_id: str, username: str, tiktok_id: str,
     if thumb:
         print(f"[{_ts()}] Thumbnail OK: {os.path.basename(thumb)}")
     else:
-        print(f"[{_ts()}] Thumbnail FAILED for {video_id} — see [thumb] lines above")
+        print(f"[{_ts()}] Thumbnail FAILED for {video_id} (see [thumb] lines above)")
     ytdlp_data = _clean_ytdlp_info(ydl_info)
     return {"file_path": actual_path, "ytdlp_data": ytdlp_data}
 

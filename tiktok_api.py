@@ -22,7 +22,15 @@ async def get_user_info(api, username: str | None = None,
         user = api.user(username=username)
     else:
         raise ValueError("Must provide username or sec_uid")
-    data = await user.info()
+    try:
+        data = await user.info()
+    except KeyError as exc:
+        # TikTokApi's __extract_from_data does hard dict access and raises KeyError
+        # when TikTok returns a partial/empty response (deleted account, bot block, etc.)
+        raise RuntimeError(
+            f"TikTokApi returned incomplete data for @{username or sec_uid} "
+            f"(missing key {exc}) -- account may not exist or cookies may be stale"
+        ) from exc
     u = data.get("userInfo", {}).get("user", {})
     s = data.get("userInfo", {}).get("stats", {})
 

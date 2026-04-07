@@ -15,10 +15,10 @@ The **user loop** runs on its own schedule. Each iteration:
 1. Loads all tracked users from the database
 2. For each user:
    - Fetches their profile info via TikTokApi (Playwright/Chromium) and detects profile changes (username, display name, bio, avatar)
-   - Fetches their full public video list via yt-dlp — no browser session needed
+   - Fetches their full public video list via yt-dlp (no browser session needed)
    - Compares it against the database
    - Downloads any new videos via yt-dlp, embedding metadata into the file; photo posts are downloaded as individual AVIF images
-   - Tracks videos that have disappeared — after 3 consecutive loop runs without the video appearing, it is marked as deleted and its file is prefixed with `del_`
+   - Tracks videos that have disappeared. After 3 consecutive loop runs without the video appearing, it is marked as deleted and its file is prefixed with `del_`
    - Tracks banned accounts similarly — confirmed after 3 consecutive checks
    - Immediately marks any previously-deleted videos or banned accounts as restored/active if they reappear
 
@@ -31,7 +31,7 @@ The **sound loop** runs independently on its own schedule:
    - Fetches all video IDs that use the sound via TikTokApi (up to 3000 videos)
    - Compares against already-known videos for that sound
    - Downloads any new videos not already in the library
-   - For each new video's author, creates an `enabled=0` user row if the account is not already tracked — preserving the data without starting full tracking
+   - For each new video's author, creates an `enabled=0` user row if the account is not already tracked (data is stored without starting full tracking)
    - Links all known videos (existing and new) to the sound via a junction table
 
 ---
@@ -96,17 +96,17 @@ The web UI will be available at `http://localhost:5000` (or via your reverse pro
 
 Open the web UI, click the **⚙ gear icon** in the top-right corner of the header to open Settings, then go to the **Cookies** section. Click **Upload cookies.txt** and select the file you exported from your browser. The status pill will turn green once it's stored.
 
-If no cookies file is present, a red warning banner appears below the header — clicking it opens the Cookies section directly.
+If no cookies file is present, a red warning banner appears below the header. Clicking it opens the Cookies section directly.
 
 ### 4. Add accounts
 
-Type a TikTok username (with or without `@`) into the **Track a user** field and click **Add**. The username is queued immediately — the input clears so you can add the next one right away. Each queued lookup runs in the background; a pending indicator appears below the form while it resolves.
+Type a TikTok username (with or without `@`) into the **Track a user** field and click **Add**. The input clears immediately so you can add the next one. Each queued lookup runs in the background; a pending indicator appears below the form while it resolves.
 
 ### 5. Wait or trigger a run
 
-Neither loop runs automatically on startup — each waits for its first interval to elapse. A **Loops** panel in the top dashboard row shows the last run time, next scheduled run, and a **Run Now** button for each loop independently.
+Neither loop runs on startup. Each waits for its first interval to elapse. A **Loops** panel in the top dashboard row shows the last run time, next scheduled run, and a **Run Now** button for each loop independently.
 
-To process a single user immediately, click the **Run** button on their card. Multiple users can be queued this way — they run in order, one at a time.
+To process a single user immediately, click the **Run** button on their card. Multiple users can be queued this way and run in order.
 
 Use the **Sort** dropdown and direction toggle in the Tracked users header to order cards by username, display name, followers, saved/deleted video counts, or date added.
 
@@ -114,7 +114,7 @@ Use the **Sort** dropdown and direction toggle in the Tracked users header to or
 
 Paste a TikTok sound URL (e.g. `https://www.tiktok.com/music/some-sound-7123456789`) or a raw numeric sound ID into the **Track a sound** field and click **Add**. Optionally give the sound a label to recognise it later.
 
-Each sound card shows its label (or sound ID), a video count, and Run/Remove buttons. Click the card to open the sound detail modal, which shows the same sortable, filterable video list as the user modal — including an **Author** column. Authors who are already tracked users appear as blue clickable chips that open the user modal; authors discovered through sound tracking but not yet actively tracked appear as muted chips.
+Each sound card shows its label (or sound ID), a video count, and Run/Remove buttons. Click the card to open the sound detail modal with a sortable, filterable video list. It includes an **Author** column: already-tracked authors appear as blue clickable chips that open the user modal; authors discovered through sound tracking but not yet actively tracked appear as muted chips.
 
 Click **Edit label** in the sound modal header to rename a sound. Click **Run** on the card or in the modal to trigger an immediate sound run without waiting for the next loop.
 
@@ -202,14 +202,14 @@ All configuration is via environment variables in `docker-compose.yml`.
 |---|---|---|
 | `USER_LOOP_INTERVAL_MINUTES` | `180` | Minutes between user loop runs. |
 | `SOUND_LOOP_INTERVAL_MINUTES` | `60` | Minutes between sound loop runs. |
-| `LOOP_INTERVAL_MINUTES` | — | Legacy alias for `USER_LOOP_INTERVAL_MINUTES`. Ignored if `USER_LOOP_INTERVAL_MINUTES` is set. |
+| `LOOP_INTERVAL_MINUTES` | (none) | Legacy alias for `USER_LOOP_INTERVAL_MINUTES`. Ignored if `USER_LOOP_INTERVAL_MINUTES` is set. |
 | `WEB_PORT` | `5000` | Port the web UI listens on inside the container. |
 | `DATA_DIR` | `/app/data` | Where the database, cookies.txt, and avatars are stored. |
 | `VIDEOS_DIR` | `/app/videos` | Where downloaded videos are saved. |
 | `THUMBNAIL_WORKERS` | `min(cpu_count, 12)` | Parallel ffmpeg workers for thumbnail generation. |
 | `THUMBNAIL_USE_GPU` | `0` | Set to `1` to use NVDEC hardware decode for thumbnail extraction (requires CUDA-enabled ffmpeg). |
 | `TZ` | `UTC` | Container timezone for log timestamps, e.g. `Europe/Oslo`. |
-| `ms_token` | — | Fallback: provide the raw `msToken` cookie value if not using a cookies file. |
+| `ms_token` | (none) | Fallback: provide the raw `msToken` cookie value if not using a cookies file. |
 
 ---
 

@@ -1,4 +1,4 @@
-"""Sound tracking — discovers and downloads new videos for tracked TikTok sounds."""
+"""Sound tracking: discovers and downloads new videos for tracked TikTok sounds."""
 
 from __future__ import annotations
 
@@ -9,6 +9,8 @@ import database as db
 from config import get_ms_token, get_cookies_flat, CHROME_EXECUTABLE
 from tiktok_api import fetch_sound_video_ids, get_video_details
 from downloader import download_video, download_photos
+
+_CONFIRM_THRESHOLD = 3
 
 
 async def process_all_sounds(log: Callable[[str], None]) -> None:
@@ -42,11 +44,31 @@ async def process_sound(sound: dict, log: Callable[[str], None]) -> None:
 
     log(f"[sound] {len(remote_ids)} video(s) found for sound '{label}'")
 
-    known_ids = db.get_sound_video_ids(sound_id)
-    new_ids   = [vid_id for vid_id in remote_ids if vid_id not in known_ids]
+    remote_id_set = set(remote_ids)
+    known_ids     = db.get_sound_video_ids(sound_id)
+    new_ids       = [vid_id for vid_id in remote_ids if vid_id not in known_ids]
+
+    # Deletion tracking: active videos no longer in the remote listing
+    active_ids   = db.get_sound_active_video_ids(sound_id)
+    missing_ids  = active_ids - remote_id_set
+
+    # Clear pending counter for any video that came back
+    pending_ids = db.get_sound_pending_deletion_video_ids(sound_id)
+    for vid_id in pending_ids & remote_id_set:
+        db.clear_video_pending_deletion(vid_id)
+        log(f"[sound] Deletion check cleared: {vid_id} (back in sound listing)")
+
+    for vid_id in missing_ids:
+        count = db.increment_video_pending_deletion(vid_id)
+        if count >= _CONFIRM_THRESHOLD:
+            db.mark_video_deleted(vid_id)
+            log(f"[sound] Marked deleted (confirmed {_CONFIRM_THRESHOLD}/{_CONFIRM_THRESHOLD}): {vid_id}")
+        else:
+            log(f"[sound] Possibly deleted ({count}/{_CONFIRM_THRESHOLD}): {vid_id}")
 
     if not new_ids:
-        log(f"[sound] No new videos for sound '{label}'")
+        if not missing_ids:
+            log(f"[sound] No changes for sound '{label}'")
         db.update_sound_last_checked(sound_id)
         return
 
@@ -54,13 +76,13 @@ async def process_sound(sound: dict, log: Callable[[str], None]) -> None:
     cookies = get_cookies_flat()
 
     for vid_id in new_ids:
-        # Already in DB (downloaded via user tracking) — just add the junction row
+        # Already in DB (downloaded via user tracking) -- just add the junction row
         if db.get_video(vid_id):
             db.add_sound_video(sound_id, vid_id)
             log(f"[sound] Linked existing video {vid_id} to sound '{label}'")
             continue
 
-        # Fetch full video details (placeholder username — TikTok redirects by video ID)
+        # Fetch full video details (placeholder username; TikTok redirects by video ID)
         try:
             details = get_video_details(vid_id, "user", cookies)
         except Exception as e:
