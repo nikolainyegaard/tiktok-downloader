@@ -296,6 +296,12 @@ async def _process_single_user(user: dict, cookies: dict, fetch_videos: bool = T
         except UserBannedException:
             if _was_banned:
                 _log(f"  No changes (still banned)")
+                banned_at = user.get("banned_at")
+                if (banned_at
+                        and time.time() - banned_at >= 14 * 86400
+                        and user.get("tracking_enabled", 1)):
+                    db.set_user_tracking_enabled(tiktok_id, False)
+                    _log(f"  Banned for 14+ consecutive days — tracking disabled")
             else:
                 _log(f"  Account banned/removed (TikTok 10202), marking as banned")
                 db.set_user_account_status(tiktok_id, "banned")
