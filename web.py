@@ -1,6 +1,4 @@
-"""
-Flask web application — user management UI and API.
-"""
+"""Flask web application: user management UI and API."""
 
 import asyncio
 import glob as _glob
@@ -64,7 +62,7 @@ def _process_add(username: str) -> None:
     existing = db.get_user(info["tiktok_id"])
     if existing:
         if not existing.get("enabled"):
-            # Sound-discovered stub (enabled=0) — promote to a fully tracked user.
+            # Sound-discovered stub (enabled=0); promote to a fully tracked user.
             db.set_user_enabled(info["tiktok_id"], True)
             db.update_user_info(
                 tiktok_id=info["tiktok_id"],
@@ -198,15 +196,21 @@ def _run_audio_cleanup() -> None:
 def _run_backfill() -> None:
     videos  = db.get_videos_missing_stats()
     cookies = get_cookies_flat()
+    total   = len(videos)
 
     with _backfill_lock:
-        _backfill_state.update({"running": True, "done": 0, "total": len(videos), "errors": 0})
+        _backfill_state.update({"running": True, "done": 0, "total": total, "errors": 0})
+
+    print(f"[backfill] Starting: {total} video(s) to process")
 
     for v in videos:
+        vid_id   = v["video_id"]
+        username = v["username"]
+        success_details = None
         try:
-            details = get_video_details(v["video_id"], v["username"], cookies)
+            details = get_video_details(vid_id, username, cookies)
             db.update_video_stats(
-                v["video_id"],
+                vid_id,
                 view_count=details.get("view_count"),
                 like_count=details.get("like_count"),
                 comment_count=details.get("comment_count"),
@@ -219,14 +223,32 @@ def _run_backfill() -> None:
                 music_artist=details.get("music_artist"),
                 raw_video_data=details.get("_raw_video_data"),
             )
+            success_details = details
         except Exception as e:
-            error_count = db.increment_stats_error(v["video_id"], str(e))
-            print(f"[backfill] {v['video_id']} (@{v['username']}) — fetch failed (attempt {error_count}/3): {e}")
+            error_str = str(e)
+            error_count = db.increment_stats_error(vid_id, error_str)
             with _backfill_lock:
                 _backfill_state["errors"] += 1
+            if "HTTP 404" in error_str or "No item data" in error_str or "Could not find page data" in error_str:
+                category = "not found (video may be deleted on TikTok)"
+            elif "HTTP " in error_str:
+                category = "HTTP error"
+            elif "timeout" in error_str.lower():
+                category = "timeout"
+            else:
+                category = "fetch error"
+            print(f"[backfill] FAIL ({error_count}/3) {vid_id} (@{username}): {category}: {e}")
         with _backfill_lock:
             _backfill_state["done"] += 1
+            done = _backfill_state["done"]
+        if success_details is not None:
+            print(f"[backfill] {done}/{total} OK: {vid_id} (@{username})"
+                  f" views={success_details.get('view_count')}")
         time.sleep(1.5)
+
+    with _backfill_lock:
+        errors = _backfill_state["errors"]
+    print(f"[backfill] Done: {total} processed, {errors} error(s)")
 
     with _backfill_lock:
         _backfill_state["running"] = False
@@ -560,6 +582,14 @@ def create_app() -> Flask:
         count = db.reset_backfill_status()
         return jsonify({"ok": True, "reset": count})
 
+    @app.route("/api/backfill/reset-errors", methods=["POST"])
+    def reset_backfill_errors():
+        with _backfill_lock:
+            if _backfill_state["running"]:
+                return jsonify({"error": "Backfill is currently running"}), 409
+        count = db.reset_backfill_errors()
+        return jsonify({"ok": True, "reset": count})
+
     @app.route("/api/stats", methods=["GET"])
     def get_aggregate_stats():
         return jsonify(db.get_aggregate_stats())
@@ -695,7 +725,7 @@ def create_app() -> Flask:
         raw      = str(body.get("sound_id", "")).strip()
         label    = str(body.get("label", "")).strip() or None
 
-        # Accept full TikTok sound URLs — extract the trailing numeric ID
+        # Accept full TikTok sound URLs; extract the trailing numeric ID
         m = re.search(r'(\d{10,25})(?:[^0-9]|$)', raw)
         sound_id = m.group(1) if m else raw
 

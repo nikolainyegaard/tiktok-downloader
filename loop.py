@@ -229,7 +229,12 @@ async def _process_single_user(user: dict, cookies: dict, fetch_videos: bool = T
         try:
             info = await _fetch_user_info(user["username"], sec_uid=user.get("sec_uid"))
 
-            # Record profile field changes before overwriting stored values
+            # Record profile field changes before overwriting stored values.
+            # Skip bio detection if the account was private_blocked last run: the bio
+            # is hidden from us, so a missing bio just means no access, not a real change.
+            # private_accessible accounts (yellow pill) have accessible bios — track normally.
+            _bio_blocked = user.get("privacy_status") == "private_blocked"
+            _is_private_now = info.get("is_private", False)
             _field_labels = {"username": "Username", "display_name": "Display name", "bio": "Bio"}
             _profile_fields = {
                 "username":     (user.get("username"),     info.get("username")),
@@ -237,6 +242,8 @@ async def _process_single_user(user: dict, cookies: dict, fetch_videos: bool = T
                 "bio":          (user.get("bio"),          info.get("bio")),
             }
             for _field, (_old, _new) in _profile_fields.items():
+                if _field == "bio" and _bio_blocked:
+                    continue
                 if _new is not None and _new != _old:
                     db.record_profile_change(tiktok_id, _field, _old)
                     if _field != "username":  # username gets its own log line below
@@ -263,7 +270,7 @@ async def _process_single_user(user: dict, cookies: dict, fetch_videos: bool = T
                 if rename_user_folder(old_username, username):
                     db.rename_user_video_paths(tiktok_id, old_username, username)
                     _log(f"  Folder renamed and DB paths updated")
-            is_private = info.get("is_private", False)
+            is_private = _is_private_now
             if info.get("avatar_url"):
                 if cache_avatar(tiktok_id, info["avatar_url"]) == "changed":
                     _log(f"  Profile change: avatar changed")
