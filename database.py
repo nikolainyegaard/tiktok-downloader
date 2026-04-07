@@ -117,9 +117,6 @@ def init_db():
             CREATE INDEX IF NOT EXISTS idx_videos_status
                 ON videos(status);
 
-            CREATE INDEX IF NOT EXISTS idx_videos_stats_backfilled_at
-                ON videos(stats_backfilled_at);
-
             CREATE INDEX IF NOT EXISTS idx_profile_history_tiktok_id
                 ON profile_history(tiktok_id);
         """)
@@ -163,6 +160,12 @@ def _migrate_db(conn):
             conn.execute(sql)
         except sqlite3.OperationalError:
             pass  # column already exists
+
+    # Index depends on stats_backfilled_at which may have been added by migration above.
+    conn.execute("""
+        CREATE INDEX IF NOT EXISTS idx_videos_stats_backfilled_at
+            ON videos(stats_backfilled_at)
+    """)
 
     # One-time stamp for videos that are already fully complete (have both view_count
     # and raw_video_data, meaning they were downloaded with v1.5.0+ and already have
