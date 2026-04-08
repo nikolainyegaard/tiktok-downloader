@@ -10,9 +10,9 @@ Runs automatically at startup; already-converted files are skipped so it is
 safe to restart mid-run. Also callable on demand via the Jobs settings panel.
 
 CRF values (libaom-av1; lower = better quality / larger file):
-  CRF_PHOTO  = 30  (photo post images)
-  CRF_THUMB  = 40  (grid thumbnails)
-  CRF_AVATAR = 35  (profile avatars)
+  CRF_PHOTO  = 28  (photo post images — best quality)
+  CRF_THUMB  = 38  (grid thumbnails — most compressed)
+  CRF_AVATAR = 30  (profile avatars — medium quality)
 """
 
 from __future__ import annotations
@@ -27,9 +27,9 @@ import time
 import database as db
 from config import VIDEOS_DIR, AVATARS_DIR, _ts
 
-CRF_PHOTO  = 30
-CRF_THUMB  = 40
-CRF_AVATAR = 35
+CRF_PHOTO  = 28
+CRF_THUMB  = 38
+CRF_AVATAR = 30
 
 # Photo post filename pattern: {video_id}_{index}.jpg
 _PHOTO_RE = _re.compile(r'^(\d+)_\d+\.(jpg|jpeg)$', _re.IGNORECASE)

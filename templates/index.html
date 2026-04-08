@@ -1401,6 +1401,7 @@
       <div class="settings-nav-item"        id="snav-loops"     onclick="switchSettingsSection('loops')">Loops</div>
       <div class="settings-nav-item"        id="snav-backfill"  onclick="switchSettingsSection('backfill')">Backfill</div>
       <div class="settings-nav-item"        id="snav-jobs"      onclick="switchSettingsSection('jobs')">Jobs</div>
+      <div class="settings-nav-item"        id="snav-utils"     onclick="switchSettingsSection('utils')">Utilities</div>
       <div class="settings-nav-item"        id="snav-diag"      onclick="switchSettingsSection('diag')">Diagnostics</div>
     </nav>
     <div class="settings-content">
@@ -1574,6 +1575,12 @@
           </div>
         </div>
 
+      </div>
+
+      <!-- Utilities section -->
+      <div id="ssec-utils" style="display:none">
+        <div class="settings-section-title">Utilities</div>
+
         <div class="job-card">
           <div class="job-card-hdr">
             <div style="flex:1">
@@ -1589,6 +1596,39 @@
           <div class="job-status" id="job-audio-status" style="display:none">
             <div id="job-audio-bar-wrap"><div class="job-bar-track"><div class="job-bar-fill" id="job-audio-bar"></div></div></div>
             <div class="job-status-text" id="job-audio-text"></div>
+          </div>
+        </div>
+
+        <div class="job-card">
+          <div class="job-card-hdr">
+            <div style="flex:1">
+              <div class="job-card-title">Delete all avatars</div>
+              <div class="job-card-desc">
+                Deletes the current cached profile picture for every tracked user. Archived
+                avatar history is preserved. On the next loop run, avatars will be
+                re-downloaded and saved without triggering a profile change event.
+              </div>
+            </div>
+            <button class="btn-danger" id="util-clear-avatars-btn" onclick="triggerClearAvatars()" style="flex-shrink:0;align-self:flex-start">Delete</button>
+          </div>
+          <div class="job-status" id="util-clear-avatars-status" style="display:none">
+            <div class="job-status-text" id="util-clear-avatars-text"></div>
+          </div>
+        </div>
+
+        <div class="job-card">
+          <div class="job-card-hdr">
+            <div style="flex:1">
+              <div class="job-card-title">Delete all thumbnails</div>
+              <div class="job-card-desc">
+                Deletes all generated thumbnails for videos and photo posts. Thumbnails will
+                be regenerated automatically on the next startup backfill.
+              </div>
+            </div>
+            <button class="btn-danger" id="util-clear-thumbs-btn" onclick="triggerClearThumbnails()" style="flex-shrink:0;align-self:flex-start">Delete</button>
+          </div>
+          <div class="job-status" id="util-clear-thumbs-status" style="display:none">
+            <div class="job-status-text" id="util-clear-thumbs-text"></div>
           </div>
         </div>
       </div>
@@ -2108,7 +2148,7 @@
 
   function switchSettingsSection(name) {
     _settingsSection = name;
-    ['cookies', 'loops', 'backfill', 'jobs', 'diag'].forEach(s => {
+    ['cookies', 'loops', 'backfill', 'jobs', 'utils', 'diag'].forEach(s => {
       document.getElementById(`ssec-${s}`).style.display    = s === name ? '' : 'none';
       document.getElementById(`snav-${s}`).classList.toggle('active', s === name);
     });
@@ -2262,6 +2302,36 @@
         }
       }
     }, 1000);
+  }
+
+  // Utilities — clear avatars
+
+  async function triggerClearAvatars() {
+    const btn    = document.getElementById('util-clear-avatars-btn');
+    const status = document.getElementById('util-clear-avatars-status');
+    const text   = document.getElementById('util-clear-avatars-text');
+    btn.disabled = true;
+    status.style.display = '';
+    text.textContent = 'Deleting…';
+    const { ok, data } = await apiJSON('/api/utils/clear-avatars', { method: 'POST' });
+    btn.disabled = false;
+    if (!ok) { text.textContent = data.error || 'Request failed.'; return; }
+    text.textContent = `Deleted ${data.deleted} avatar file${data.deleted !== 1 ? 's' : ''}.`;
+  }
+
+  // Utilities — clear thumbnails
+
+  async function triggerClearThumbnails() {
+    const btn    = document.getElementById('util-clear-thumbs-btn');
+    const status = document.getElementById('util-clear-thumbs-status');
+    const text   = document.getElementById('util-clear-thumbs-text');
+    btn.disabled = true;
+    status.style.display = '';
+    text.textContent = 'Deleting…';
+    const { ok, data } = await apiJSON('/api/utils/clear-thumbnails', { method: 'POST' });
+    btn.disabled = false;
+    if (!ok) { text.textContent = data.error || 'Request failed.'; return; }
+    text.textContent = `Deleted ${data.deleted} thumbnail file${data.deleted !== 1 ? 's' : ''}.`;
   }
 
   // ── Report view modal ─────────────────────────────────────────────────────────
