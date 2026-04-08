@@ -37,11 +37,12 @@ def _load_last_run(path: str) -> str | None:
 # ── User loop state ───────────────────────────────────────────────────────────
 
 user_loop_state = {
-    "running":      False,
-    "last_run_end": _load_last_run(USER_LAST_RUN_PATH),
-    "next_run":     None,
-    "current_user": None,
-    "logs":         deque(maxlen=1000),
+    "running":               False,
+    "last_run_end":          _load_last_run(USER_LAST_RUN_PATH),
+    "last_run_duration_secs": None,
+    "next_run":              None,
+    "current_user":          None,
+    "logs":                  deque(maxlen=1000),
 }
 _user_state_lock = threading.Lock()
 
@@ -54,9 +55,10 @@ _user_rflag_lock       = threading.Lock()
 # ── Sound loop state ──────────────────────────────────────────────────────────
 
 sound_loop_state = {
-    "running":      False,
-    "last_run_end": _load_last_run(SOUND_LAST_RUN_PATH),
-    "next_run":     None,
+    "running":               False,
+    "last_run_end":          _load_last_run(SOUND_LAST_RUN_PATH),
+    "last_run_duration_secs": None,
+    "next_run":              None,
 }
 _sound_state_lock = threading.Lock()
 
@@ -110,16 +112,18 @@ def get_state_snapshot() -> dict:
     """Return a serialisable snapshot of both loop states plus run-queue state."""
     with _user_state_lock:
         state = {
-            "user_loop_running":      user_loop_state["running"],
-            "user_loop_last_end":     user_loop_state["last_run_end"],
-            "user_loop_next":         user_loop_state["next_run"],
-            "user_loop_current_user": user_loop_state["current_user"],
-            "logs":                   list(user_loop_state["logs"]),
+            "user_loop_running":           user_loop_state["running"],
+            "user_loop_last_end":          user_loop_state["last_run_end"],
+            "user_loop_last_duration_secs": user_loop_state["last_run_duration_secs"],
+            "user_loop_next":              user_loop_state["next_run"],
+            "user_loop_current_user":      user_loop_state["current_user"],
+            "logs":                        list(user_loop_state["logs"]),
         }
     with _sound_state_lock:
-        state["sound_loop_running"]  = sound_loop_state["running"]
-        state["sound_loop_last_end"] = sound_loop_state["last_run_end"]
-        state["sound_loop_next"]     = sound_loop_state["next_run"]
+        state["sound_loop_running"]            = sound_loop_state["running"]
+        state["sound_loop_last_end"]           = sound_loop_state["last_run_end"]
+        state["sound_loop_last_duration_secs"] = sound_loop_state["last_run_duration_secs"]
+        state["sound_loop_next"]               = sound_loop_state["next_run"]
     with _run_state_lock:
         state["run_current"] = _run_state["current"]
         state["run_queue"]   = list(_run_state["queue"])
@@ -215,17 +219,24 @@ async def _process_single_user(user: dict, cookies: dict,
     ms_token = get_ms_token()
     try:
         async with TikTokApi() as api:
-            try:
-                await api.create_sessions(
-                    ms_tokens=[ms_token] if ms_token else [],
-                    num_sessions=1,
-                    sleep_after=3,
-                    executable_path=CHROME_EXECUTABLE,
-                    cookies=[cookies] if cookies else None,
-                )
-            except Exception as e:
-                _log(f"Processing @{user['username']} — session failed, skipping: {e}")
-                return
+            for _attempt in range(2):
+                try:
+                    await api.create_sessions(
+                        ms_tokens=[ms_token] if ms_token else [],
+                        num_sessions=1,
+                        sleep_after=3,
+                        executable_path=CHROME_EXECUTABLE,
+                        cookies=[cookies] if cookies else None,
+                    )
+                    break  # session created OK
+                except Exception as e:
+                    _logd(f"  [{tiktok_id}] create_sessions attempt {_attempt + 1} error: {e}")
+                    if _attempt == 0:
+                        _log(f"Processing @{user['username']} — session failed, retrying in 90s...")
+                        await asyncio.sleep(90)
+                    else:
+                        _log(f"Processing @{user['username']} — session failed after retry, skipping")
+                        return
             await asyncio.sleep(3)
 
             _log(f"Processing @{user['username']} (ID: {tiktok_id})")
@@ -560,6 +571,7 @@ def run_user_loop():
     """Process all enabled tracked users. Called by the user loop scheduler thread."""
     with _user_state_lock:
         user_loop_state["running"] = True
+    _loop_start = time.monotonic()
 
     _log("=== User loop started ===")
     users = db.get_all_users()
@@ -574,9 +586,11 @@ def run_user_loop():
 
     _log("=== User loop complete ===")
     last_run_end = datetime.now(timezone.utc).isoformat()
+    duration_secs = round(time.monotonic() - _loop_start)
     with _user_state_lock:
-        user_loop_state["running"]      = False
-        user_loop_state["last_run_end"] = last_run_end
+        user_loop_state["running"]                = False
+        user_loop_state["last_run_end"]           = last_run_end
+        user_loop_state["last_run_duration_secs"] = duration_secs
     os.makedirs(DATA_DIR, exist_ok=True)
     with open(USER_LAST_RUN_PATH, "w", encoding="utf-8") as f:
         f.write(last_run_end)
@@ -586,6 +600,7 @@ def run_sound_loop():
     """Process all tracked sounds. Called by the sound loop scheduler thread."""
     with _sound_state_lock:
         sound_loop_state["running"] = True
+    _loop_start = time.monotonic()
 
     _log("=== Sound loop started ===")
     try:
@@ -595,9 +610,11 @@ def run_sound_loop():
 
     _log("=== Sound loop complete ===")
     last_run_end = datetime.now(timezone.utc).isoformat()
+    duration_secs = round(time.monotonic() - _loop_start)
     with _sound_state_lock:
-        sound_loop_state["running"]      = False
-        sound_loop_state["last_run_end"] = last_run_end
+        sound_loop_state["running"]                = False
+        sound_loop_state["last_run_end"]           = last_run_end
+        sound_loop_state["last_run_duration_secs"] = duration_secs
     os.makedirs(DATA_DIR, exist_ok=True)
     with open(SOUND_LAST_RUN_PATH, "w", encoding="utf-8") as f:
         f.write(last_run_end)
