@@ -911,6 +911,38 @@ def create_app() -> Flask:
         threading.Thread(target=_run_file_purge, daemon=True, name="file-check").start()
         return jsonify({"ok": True})
 
+    @app.route("/api/utils/clear-avatars", methods=["POST"])
+    def clear_avatars():
+        """Delete current avatar files (not timestamped archives) for all users."""
+        deleted = 0
+        if os.path.isdir(AVATARS_DIR):
+            for fname in os.listdir(AVATARS_DIR):
+                # Current avatars: {tiktok_id}.avif or {tiktok_id}.jpg — no underscore before extension
+                stem, ext = os.path.splitext(fname)
+                if ext.lower() in (".avif", ".jpg", ".jpeg") and "_" not in stem:
+                    try:
+                        os.remove(os.path.join(AVATARS_DIR, fname))
+                        deleted += 1
+                    except OSError:
+                        pass
+        return jsonify({"deleted": deleted})
+
+    @app.route("/api/utils/clear-thumbnails", methods=["POST"])
+    def clear_thumbnails():
+        """Delete all thumbnail files across all user thumbs directories."""
+        deleted = 0
+        for thumbs_dir in _glob.glob(os.path.join(VIDEOS_DIR, "*", "thumbs")):
+            if not os.path.isdir(thumbs_dir):
+                continue
+            for fname in os.listdir(thumbs_dir):
+                if os.path.splitext(fname)[1].lower() in (".avif", ".jpg", ".jpeg"):
+                    try:
+                        os.remove(os.path.join(thumbs_dir, fname))
+                        deleted += 1
+                    except OSError:
+                        pass
+        return jsonify({"deleted": deleted})
+
     @app.route("/api/reports/<path:filename>", methods=["GET"])
     def download_report(filename: str):
         # Prevent path traversal

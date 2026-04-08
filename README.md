@@ -135,6 +135,8 @@ All profile pictures, thumbnails, and photo posts are stored as **AVIF** images 
 
 The **Jobs** section also has a **File integrity check**: a **Scan** button shows which videos have a database record but no file on disk (dry run, no changes). A **Purge** button removes those records from the database, allowing the loop to re-download them. A full report is written to disk and can be downloaded or viewed in the UI. The same check runs automatically at midnight and noon each day.
 
+The **Utilities** section has one-off maintenance actions: delete all cached avatar images (re-downloaded on the next loop without triggering change history), delete all thumbnails (regenerated on next startup), and remove leftover audio-only files from before video-only downloads were enforced.
+
 ---
 
 ## Caddy integration
