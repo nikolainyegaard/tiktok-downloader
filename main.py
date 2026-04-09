@@ -293,6 +293,10 @@ if __name__ == "__main__":
     n = db.migrate_username_history_to_profile_history()
     print(f"{_ts()} Migration: {n} username history record(s) in profile_history.")
 
+    n = db.backfill_avatar_cached()
+    if n:
+        print(f"{_ts()} Startup: found {n} avatar file(s) on disk, avatar_cached flags updated.")
+
     app = create_app()
 
     print(f"{_ts()} Starting loop threads...")

@@ -13,9 +13,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Bot detection with automatic session reset and per-user retry; loop aborts after 3 consecutive post-reset failures
 - `stats_updated_at` column on `videos` table, stamped by per-loop stats upserts
 - Loop duration saved to disk and pre-populated in the UI on restart
+- `avatar_cached` flag on the `users` table; avatar images are only requested when a file is confirmed to exist on disk, eliminating repeated 404 requests for users without a cached avatar
+- Startup scan sets `avatar_cached` for any avatar files already on disk, so existing deployments are not affected by the new column's default of 0
+- "Include banned users" toggle on the Delete all avatars utility; banned users are excluded by default since their avatars cannot be re-fetched from TikTok
 
 ### Changed
 - Recently Deleted panel now only shows individually deleted videos, not those cleared by an account ban
+- Avatar endpoint serves with `Cache-Control: max-age=300`, reducing repeated conditional requests from the browser
+- Delete all avatars utility resets the `avatar_cached` flag for removed files and skips banned users unless the toggle is enabled
 
 ## [1.23.0] - 2026-04-08
 

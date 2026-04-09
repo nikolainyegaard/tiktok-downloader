@@ -1606,10 +1606,15 @@
             <div style="flex:1">
               <div class="job-card-title">Delete all avatars</div>
               <div class="job-card-desc">
-                Deletes the current cached profile picture for every tracked user. Archived
-                avatar history is preserved. On the next loop run, avatars will be
-                re-downloaded and saved without triggering a profile change event.
+                Deletes the current cached profile picture for tracked users. Archived avatar
+                history is preserved. On the next loop run, avatars will be re-downloaded and
+                saved without triggering a profile change event. Banned users are excluded by
+                default — their avatars cannot be re-fetched from TikTok.
               </div>
+              <label style="display:flex;align-items:center;gap:6px;margin-top:8px;font-size:0.85em;cursor:pointer">
+                <input type="checkbox" id="util-clear-avatars-include-banned">
+                Include banned users
+              </label>
             </div>
             <button class="btn-danger" id="util-clear-avatars-btn" onclick="triggerClearAvatars()" style="flex-shrink:0;align-self:flex-start">Delete</button>
           </div>
@@ -2315,13 +2320,17 @@
   // Utilities — clear avatars
 
   async function triggerClearAvatars() {
-    const btn    = document.getElementById('util-clear-avatars-btn');
-    const status = document.getElementById('util-clear-avatars-status');
-    const text   = document.getElementById('util-clear-avatars-text');
+    const btn          = document.getElementById('util-clear-avatars-btn');
+    const status       = document.getElementById('util-clear-avatars-status');
+    const text         = document.getElementById('util-clear-avatars-text');
+    const includeBanned = document.getElementById('util-clear-avatars-include-banned').checked;
     btn.disabled = true;
     status.style.display = '';
     text.textContent = 'Deleting…';
-    const { ok, data } = await apiJSON('/api/utils/clear-avatars', { method: 'POST' });
+    const { ok, data } = await apiJSON('/api/utils/clear-avatars', {
+      method: 'POST',
+      body: JSON.stringify({ include_banned: includeBanned }),
+    });
     btn.disabled = false;
     if (!ok) { text.textContent = data.error || 'Request failed.'; return; }
     text.textContent = `Deleted ${data.deleted} avatar file${data.deleted !== 1 ? 's' : ''}.`;
@@ -2676,9 +2685,9 @@
           <div class="user-card-top">
             <div class="avatar-wrap">
               <span class="avatar-letter">${esc((u.username||'?')[0])}</span>
-              <img class="user-avatar" src="/api/users/${esc(u.tiktok_id)}/avatar" alt=""
+              ${u.avatar_cached ? `<img class="user-avatar" src="/api/users/${esc(u.tiktok_id)}/avatar" alt=""
                    onerror="this.style.display='none'"
-                   onclick="event.stopPropagation();openImgModalUrl('/api/users/${esc(u.tiktok_id)}/avatar')">
+                   onclick="event.stopPropagation();openImgModalUrl('/api/users/${esc(u.tiktok_id)}/avatar')">` : ''}
             </div>
             <div class="user-identity">
               <div class="user-display-name">${esc(u.display_name || u.username)}</div>
@@ -3711,9 +3720,9 @@
     document.getElementById('modalHeader').innerHTML = `
       <div class="modal-avatar-wrap">
         <span class="avatar-letter">${esc((u.username||'?')[0])}</span>
-        <img class="modal-avatar" src="/api/users/${esc(u.tiktok_id)}/avatar" alt=""
+        ${u.avatar_cached ? `<img class="modal-avatar" src="/api/users/${esc(u.tiktok_id)}/avatar" alt=""
              onerror="this.style.display='none'"
-             onclick="openImgModalUrl('/api/users/${esc(u.tiktok_id)}/avatar')">
+             onclick="openImgModalUrl('/api/users/${esc(u.tiktok_id)}/avatar')">` : ''}
       </div>
       <div class="modal-user-body">
         <div class="modal-name-row">
