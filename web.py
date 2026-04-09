@@ -546,9 +546,9 @@ def create_app() -> Flask:
         avif = avatar_path(tiktok_id)                 # .avif
         jpg  = avif.replace(".avif", ".jpg")          # legacy fallback
         if os.path.exists(avif):
-            return send_file(avif, mimetype="image/avif")
+            return send_file(avif, mimetype="image/avif", max_age=300)
         if os.path.exists(jpg):
-            return send_file(jpg, mimetype="image/jpeg")
+            return send_file(jpg, mimetype="image/jpeg", max_age=300)
         return ("", 404)
 
     @app.route("/api/users/<tiktok_id>/avatar-history/<filename>", methods=["GET"])
@@ -915,18 +915,41 @@ def create_app() -> Flask:
 
     @app.route("/api/utils/clear-avatars", methods=["POST"])
     def clear_avatars():
-        """Delete current avatar files (not timestamped archives) for all users."""
+        """Delete current avatar files (not timestamped archives) for tracked users."""
+        body = request.get_json(silent=True) or {}
+        include_banned = bool(body.get("include_banned", False))
+
+        banned_ids = set()
+        if not include_banned:
+            with db.get_db() as conn:
+                rows = conn.execute(
+                    "SELECT tiktok_id FROM users WHERE account_status = 'banned'"
+                ).fetchall()
+                banned_ids = {r["tiktok_id"] for r in rows}
+
         deleted = 0
+        deleted_ids = []
         if os.path.isdir(AVATARS_DIR):
             for fname in os.listdir(AVATARS_DIR):
                 # Current avatars: {tiktok_id}.avif or {tiktok_id}.jpg — no underscore before extension
                 stem, ext = os.path.splitext(fname)
                 if ext.lower() in (".avif", ".jpg", ".jpeg") and "_" not in stem:
+                    if stem in banned_ids:
+                        continue
                     try:
                         os.remove(os.path.join(AVATARS_DIR, fname))
                         deleted += 1
+                        deleted_ids.append(stem)
                     except OSError:
                         pass
+
+        if deleted_ids:
+            with db.get_db() as conn:
+                conn.executemany(
+                    "UPDATE users SET avatar_cached = 0 WHERE tiktok_id = ?",
+                    [(tid,) for tid in deleted_ids]
+                )
+
         return jsonify({"deleted": deleted})
 
     @app.route("/api/utils/clear-thumbnails", methods=["POST"])

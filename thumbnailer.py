@@ -99,6 +99,7 @@ def cache_avatar(tiktok_id: str, avatar_url: str) -> str | bool:
                 changed = True
 
         os.replace(avif_tmp, path)
+        db.set_avatar_cached(tiktok_id, True)
         return "changed" if changed else "unchanged"
     except Exception:
         _try_remove(avif_tmp)

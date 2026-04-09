@@ -156,6 +156,7 @@ def _migrate_db(conn):
         "ALTER TABLE sounds ADD COLUMN tracking_enabled   INTEGER NOT NULL DEFAULT 1",
         "ALTER TABLE videos ADD COLUMN deleted_reason     TEXT",
         "ALTER TABLE videos ADD COLUMN stats_updated_at   INTEGER",
+        "ALTER TABLE users  ADD COLUMN avatar_cached      INTEGER NOT NULL DEFAULT 0",
     ]
     for sql in migrations:
         try:
@@ -285,6 +286,38 @@ def record_profile_change(tiktok_id: str, field: str, old_value: str | None) -> 
             "INSERT INTO profile_history (tiktok_id, field, old_value, changed_at) VALUES (?, ?, ?, ?)",
             (tiktok_id, field, old_value, int(time.time()))
         )
+
+
+def set_avatar_cached(tiktok_id: str, cached: bool) -> None:
+    with get_db() as conn:
+        conn.execute("UPDATE users SET avatar_cached = ? WHERE tiktok_id = ?",
+                     (1 if cached else 0, tiktok_id))
+
+
+def backfill_avatar_cached() -> int:
+    """
+    Scan the avatars directory and set avatar_cached=1 for any user whose file
+    already exists on disk. Called at startup so existing deployments don't lose
+    avatars after the column is added with DEFAULT 0.
+    Returns the number of files found.
+    """
+    from config import AVATARS_DIR
+    if not os.path.isdir(AVATARS_DIR):
+        return 0
+    cached_ids = [
+        os.path.splitext(fname)[0]
+        for fname in os.listdir(AVATARS_DIR)
+        if os.path.splitext(fname)[1].lower() in (".avif", ".jpg", ".jpeg")
+        and "_" not in os.path.splitext(fname)[0]
+    ]
+    if not cached_ids:
+        return 0
+    with get_db() as conn:
+        conn.executemany(
+            "UPDATE users SET avatar_cached = 1 WHERE tiktok_id = ?",
+            [(tid,) for tid in cached_ids]
+        )
+    return len(cached_ids)
 
 
 def get_profile_history(tiktok_id: str) -> list[dict]:
