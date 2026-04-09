@@ -3434,7 +3434,7 @@
     if (uDur)     uDur.textContent     = state.user_loop_last_duration_secs != null ? fmt.dur(state.user_loop_last_duration_secs) : '';
     if (uNewVids) uNewVids.textContent = state.user_loop_last_new_videos    != null ? `${state.user_loop_last_new_videos} new` : '';
     if (uNext) uNext.textContent = state.user_loop_running
-      ? (currentUser ? `Downloading @${currentUser}` : 'Running…')
+      ? 'Running…'
       : (state.user_loop_next ? `Next: ${fmt.relFuture(state.user_loop_next)}` : '');
     if (uBtn) uBtn.disabled = state.user_loop_running;
 
