@@ -50,9 +50,15 @@ async def get_user_info(api, username: str | None = None,
         try:
             data = await user.info()
         except KeyError as exc:
+            if exc.args[0] == 'user':
+                # TikTok returned userInfo without a 'user' sub-key — the
+                # canonical shape for banned / removed / FTC-restricted accounts.
+                raise UserBannedException(
+                    f"@{username} is banned or removed on TikTok"
+                ) from exc
             raise RuntimeError(
                 f"TikTokApi returned incomplete data for @{username} "
-                f"(missing key {exc}) -- account may not exist or cookies may be stale"
+                f"(missing key {exc}) -- cookies may be stale"
             ) from exc
         if data.get("statusCode") in (10202, 10223):
             raise UserBannedException(

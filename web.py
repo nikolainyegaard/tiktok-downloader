@@ -17,7 +17,7 @@ import database as db
 from config import (get_ms_token, get_cookies_flat, cookies_info, COOKIES_PATH, COOKIES_TIMESTAMP_PATH,
                     DATA_DIR, VIDEOS_DIR, AVATARS_DIR, CHROME_EXECUTABLE, APP_VERSION,
                     USER_LOOP_INTERVAL_MINUTES, SOUND_LOOP_INTERVAL_MINUTES, DELETION_CONFIRM_THRESHOLD)
-from tiktok_api import get_user_info, get_video_details
+from tiktok_api import get_user_info, get_video_details, UserBannedException
 from loop import (is_user_loop_running, is_sound_loop_running, get_state_snapshot,
                   trigger_user_event, trigger_sound_event,
                   enqueue_user_run, enqueue_sound_run,
@@ -51,6 +51,10 @@ def _process_add(username: str) -> None:
 
     try:
         info = asyncio.run(_lookup())
+    except UserBannedException as e:
+        with _pending_lock:
+            _pending[username] = {"status": "error", "message": str(e)}
+        return
     except Exception as e:
         with _pending_lock:
             _pending[username] = {"status": "error", "message": f"TikTok API error: {e}"}

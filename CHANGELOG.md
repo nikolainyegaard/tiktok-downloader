@@ -46,6 +46,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - "Thumbnail OK" no longer logged for each photo post; thumbnail failures are still reported
 
 ### Fixed
+- Adding a banned or removed account now shows a clear "is banned or removed on TikTok" error instead of a misleading "missing key 'user' — cookies may be stale" message
 - "X videos found" no longer logged for private accounts where the video fetch is skipped
 - "Profile updates" counter in user modal now uses singular "update" when the count is 1
 - Video search in user modal no longer loses focus on each keystroke; the toolbar rebuilds around the active input without destroying it
