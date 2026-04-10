@@ -500,14 +500,27 @@ def get_all_video_stats() -> dict:
 def update_user_privacy_status(tiktok_id: str, status: str):
     """status: 'public' | 'private_accessible' | 'private_blocked'"""
     with get_db() as conn:
+        row = conn.execute(
+            "SELECT privacy_status FROM users WHERE tiktok_id = ?", (tiktok_id,)
+        ).fetchone()
+        old_status = row["privacy_status"] if row else None
         conn.execute(
             "UPDATE users SET privacy_status = ? WHERE tiktok_id = ?",
             (status, tiktok_id),
         )
+        if old_status and old_status != status:
+            conn.execute(
+                "INSERT INTO profile_history (tiktok_id, field, old_value, changed_at) VALUES (?, 'privacy_status', ?, ?)",
+                (tiktok_id, old_status, int(time.time()))
+            )
 
 
 def set_user_account_status(tiktok_id: str, status: str):
     with get_db() as conn:
+        row = conn.execute(
+            "SELECT account_status FROM users WHERE tiktok_id = ?", (tiktok_id,)
+        ).fetchone()
+        old_status = row["account_status"] if row else None
         if status == "banned":
             conn.execute(
                 "UPDATE users SET account_status = ?, banned_at = COALESCE(banned_at, ?) WHERE tiktok_id = ?",
@@ -517,6 +530,11 @@ def set_user_account_status(tiktok_id: str, status: str):
             conn.execute(
                 "UPDATE users SET account_status = ? WHERE tiktok_id = ?",
                 (status, tiktok_id),
+            )
+        if old_status and old_status != status:
+            conn.execute(
+                "INSERT INTO profile_history (tiktok_id, field, old_value, changed_at) VALUES (?, 'account_status', ?, ?)",
+                (tiktok_id, old_status, int(time.time()))
             )
 
 

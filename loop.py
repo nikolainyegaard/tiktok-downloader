@@ -224,6 +224,12 @@ def enqueue_sound_run(sound_id: str) -> bool:
     return True
 
 
+# ── Helpers ───────────────────────────────────────────────────────────────────
+
+def _npost(n: int) -> str:
+    return "1 post" if n == 1 else f"{n} posts"
+
+
 # ── Logging ───────────────────────────────────────────────────────────────────
 
 def _log(msg: str):
@@ -273,7 +279,7 @@ async def _process_single_user(user: dict, api, cookies: dict,
             if _was_banned:
                 restored = db.restore_banned_videos(tiktok_id)
                 db.set_user_account_status(tiktok_id, "active")
-                _log(f"  Account restored: ban cleared, {restored} video(s) re-activated")
+                _log(f"  Account restored: ban cleared, {_npost(restored)} re-activated")
 
             # Record profile field changes before overwriting stored values.
             # Skip bio detection if the account was private_blocked last run: the bio
@@ -336,7 +342,7 @@ async def _process_single_user(user: dict, api, cookies: dict,
                 db.set_user_account_status(tiktok_id, "banned")
                 n = db.ban_user_videos(tiktok_id)
                 if n:
-                    _log(f"  {n} active video(s) marked deleted (user_banned)")
+                    _log(f"  {_npost(n)} marked deleted (user_banned)")
             return
         except Exception as e:
             if _is_bot_error(e):
@@ -376,7 +382,7 @@ async def _process_single_user(user: dict, api, cookies: dict,
             return
 
         if item_list_map:
-            _log(f"  {len(item_list_map)} videos found")
+            _log(f"  {_npost(len(item_list_map))} found")
 
         # ── Fallback: yt-dlp flat extraction ─────────────────────────────────
         # Only runs when item_list returned nothing (failed or no sec_uid).
@@ -385,7 +391,7 @@ async def _process_single_user(user: dict, api, cookies: dict,
                 ydlp_videos = get_user_videos(tiktok_id, sec_uid=sec_uid,
                                               cookies_path=COOKIES_PATH)
                 ydlp_map = {v["video_id"]: v for v in ydlp_videos}
-                _log(f"  {len(ydlp_map)} videos found")
+                _log(f"  {_npost(len(ydlp_map))} found")
                 _logd(f"  [{tiktok_id}] {len(ydlp_map)} videos via yt-dlp fallback")
             except Exception as e:
                 _log(f"  Video fetch failed — skipping user")

@@ -13,6 +13,10 @@ from downloader import download_video, download_photos
 _CONFIRM_THRESHOLD = DELETION_CONFIRM_THRESHOLD
 
 
+def _npost(n: int) -> str:
+    return "1 post" if n == 1 else f"{n} posts"
+
+
 async def process_all_sounds(log: Callable[[str], None]) -> None:
     """Fetch and download new videos for all tracked sounds.
     Called once per main loop run, after user processing.
@@ -39,11 +43,11 @@ async def process_sound(sound: dict, log: Callable[[str], None]) -> None:
         remote_ids = await fetch_sound_video_ids(sound_id, ms_token, CHROME_EXECUTABLE,
                                                   cookies_flat=get_cookies_flat())
     except Exception as e:
-        log(f"Failed to fetch videos for sound {sound_id}: {e}")
+        log(f"Failed to fetch posts for sound {sound_id}: {e}")
         db.update_sound_last_checked(sound_id)
         return
 
-    log(f"{len(remote_ids)} video(s) found for sound '{label}'")
+    log(f"{_npost(len(remote_ids))} found for sound '{label}'")
 
     remote_id_set = set(remote_ids)
     known_ids     = db.get_sound_video_ids(sound_id)
@@ -73,7 +77,7 @@ async def process_sound(sound: dict, log: Callable[[str], None]) -> None:
         db.update_sound_last_checked(sound_id)
         return
 
-    log(f"{len(new_ids)} new video(s) for sound '{label}'")
+    log(f"New: {_npost(len(new_ids))} for sound '{label}'")
     cookies = get_cookies_flat()
 
     for vid_id in new_ids:
