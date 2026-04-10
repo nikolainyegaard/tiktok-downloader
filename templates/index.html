@@ -472,7 +472,8 @@
     .modal-name       { font-size: 20px; font-weight: 700; line-height: 1.2; word-break: break-word; }
     .modal-verified   { font-size: 11px; color: var(--accent); font-weight: 700; }
     .modal-handle     { font-size: 13px; color: var(--text-dim); margin-top: 4px; }
-    .modal-id-line    { font-family: var(--mono); font-size: 11px; color: var(--muted); margin-top: 4px; }
+    .modal-id-line        { font-family: var(--mono); font-size: 11px; color: var(--muted); margin-top: 4px; }
+    .modal-ban-countdown  { font-size: 11px; color: var(--muted); margin-top: 4px; }
     .modal-bio        { font-size: 13px; color: var(--text-dim); margin-top: 8px; line-height: 1.5;
                         max-height: 72px; overflow-y: auto; }
     .modal-stats-row  { display: flex; gap: 20px; margin-top: 10px; font-size: 12px;
@@ -632,6 +633,17 @@
     .video-row:hover   { background: var(--surface2); }
     .video-row:last-child { border-bottom: none; }
     .video-row-highlight { background: rgba(224,168,58,.22); }
+
+    /* Grid view */
+    .video-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); gap: 3px; padding: 8px; align-content: start; }
+    .vgrid-cell { position: relative; aspect-ratio: 9/16; overflow: hidden; border-radius: 4px; background: var(--surface2); cursor: pointer; }
+    .vgrid-cell:hover { opacity: .85; }
+    .vgrid-cell img { width: 100%; height: 100%; object-fit: cover; display: block; }
+    .vgrid-cell.deleted   { outline: 2px solid var(--red);    outline-offset: -2px; }
+    .vgrid-cell.undeleted { outline: 2px solid var(--yellow); outline-offset: -2px; }
+    .vgrid-cell.missing   { outline: 2px solid #ff9800;       outline-offset: -2px; }
+    .vgrid-overlay { position: absolute; bottom: 0; left: 0; right: 0; padding: 16px 5px 4px; background: linear-gradient(transparent, rgba(0,0,0,.65)); display: flex; align-items: flex-end; justify-content: space-between; pointer-events: none; }
+    .vgrid-views  { font-size: 10px; font-weight: 600; color: #fff; text-shadow: 0 1px 2px rgba(0,0,0,.8); line-height: 1; }
 
     .video-thumb {
       width: 90px; height: 51px;
@@ -1973,6 +1985,7 @@
 
   const _FIELD_LABELS = {
     username: 'Username', display_name: 'Display name', bio: 'Bio', avatar: 'Avatar',
+    account_status: 'Account status', privacy_status: 'Privacy',
   };
 
   function _recentDate(ts) {
@@ -3637,6 +3650,7 @@
   let _modalPendingHighlight = null;   // { videoId, filter, sortField, sortDir } or null
   let _modalLoaded   = 0;
   let _modalObs      = null;
+  let _modalView     = 'list';   // 'list' | 'grid'
   const MODAL_PAGE   = 50;
 
   const VCOLS = [
@@ -3682,7 +3696,7 @@
     _phistField  = 'all';
     _phistUserId = null;
     document.getElementById('phistPanel').style.display     = 'none';
-    document.getElementById('videoListHdr').style.display   = '';
+    document.getElementById('videoListHdr').style.display   = _modalView === 'grid' ? 'none' : '';
     document.getElementById('modalVideoList').style.display = '';
 
     document.getElementById('modalBackdrop').style.display = 'flex';
@@ -3924,6 +3938,14 @@
           .toLocaleDateString('en-GB', { month: 'short', year: 'numeric' })
       : '';
 
+    const banCountdownStr = (() => {
+      if (u.account_status !== 'banned' || !u.banned_at || u.tracking_enabled === 0) return '';
+      const daysElapsed = Math.floor((Date.now() / 1000 - u.banned_at) / 86400);
+      const daysLeft    = 14 - daysElapsed;
+      if (daysLeft <= 0) return '';
+      return `${daysLeft} ${daysLeft === 1 ? 'day' : 'days'} until inactive`;
+    })();
+
     document.getElementById('modalHeader').innerHTML = `
       <div class="modal-avatar-wrap">
         <span class="avatar-letter">${esc((u.username||'?')[0])}</span>
@@ -3948,6 +3970,7 @@
           ${oldNames ? `<span class="user-old-names">· ${oldNames}</span>` : ''}
         </div>
         <div class="modal-id-line">id:${esc(u.tiktok_id)}${joinStr}</div>
+        ${banCountdownStr ? `<div class="modal-ban-countdown">${banCountdownStr}</div>` : ''}
         ${u.bio ? `<div class="modal-bio">${esc(u.bio)}</div>` : ''}
         <div class="modal-stats-row">
           <span><strong>${(u.follower_count || 0).toLocaleString()}</strong> followers</span>
@@ -4023,7 +4046,9 @@
       + `<input id="modalVideoSearch" type="search" value="${searchVal}" placeholder="Search videos…"
            oninput="onModalSearch(this.value)"
            style="width:140px;font-size:12px;padding:3px 8px;border:1px solid var(--border);border-radius:6px;background:var(--surface2);color:var(--text)">`
-      + `<button class="filter-pill" style="margin-left:auto" onclick="openProfileHistory()">Profile history</button>`;
+      + `<button class="filter-pill${_modalView === 'list' ? ' active' : ''}" style="margin-left:auto" onclick="setModalView('list')" title="List view">${_listViewIcon}</button>`
+      + `<button class="filter-pill${_modalView === 'grid' ? ' active' : ''}" onclick="setModalView('grid')" title="Grid view">${_gridViewIcon}</button>`
+      + `<button class="filter-pill" onclick="openProfileHistory()">Profile history</button>`;
     if (searchWasFocused) {
       const el = toolbar.querySelector('#modalVideoSearch');
       if (el) { el.focus(); el.setSelectionRange(searchSelEnd, searchSelEnd); }
@@ -4037,11 +4062,21 @@
   let _phistUserId = null;
 
   const _PHIST_FIELD_LABELS = {
-    all:          'All',
-    username:     'Username',
-    display_name: 'Display name',
-    bio:          'Bio',
-    avatar:       'Avatar',
+    all:            'All',
+    username:       'Username',
+    display_name:   'Display name',
+    bio:            'Bio',
+    avatar:         'Avatar',
+    account_status: 'Account status',
+    privacy_status: 'Privacy',
+  };
+
+  const _STATUS_LABELS = {
+    active:              'Active',
+    banned:              'Banned',
+    public:              'Public',
+    private_accessible:  'Private (accessible)',
+    private_blocked:     'Private',
   };
 
   async function openProfileHistory(field) {
@@ -4076,7 +4111,7 @@
 
   function _closeProfileHistory() {
     document.getElementById('phistPanel').style.display     = 'none';
-    document.getElementById('videoListHdr').style.display   = '';
+    document.getElementById('videoListHdr').style.display   = _modalView === 'grid' ? 'none' : '';
     document.getElementById('modalVideoList').style.display = '';
     if (_modalVideos.length) {
       _renderModalToolbar(_modalVideos);
@@ -4093,7 +4128,7 @@
   }
 
   function _renderHistoryToolbar() {
-    const fields = ['all', 'username', 'display_name', 'bio', 'avatar'];
+    const fields = ['all', 'username', 'display_name', 'bio', 'avatar', 'account_status', 'privacy_status'];
     const pills  = fields.map(f => {
       const active = _phistField === f ? ' active' : '';
       return `<button class="filter-pill${active}" onclick="setHistoryField('${f}')">${_PHIST_FIELD_LABELS[f]}</button>`;
@@ -4120,13 +4155,15 @@
     // old_value of the next-newer entry for that same field.
     const u = _modalUser;
     const _currentVal = {
-      username:     u?.username     || null,
-      display_name: u?.display_name || null,
-      bio:          u?.bio          || null,
-      avatar:       '__current__',
+      username:       u?.username       || null,
+      display_name:   u?.display_name   || null,
+      bio:            u?.bio            || null,
+      avatar:         '__current__',
+      account_status: u?.account_status || null,
+      privacy_status: u?.privacy_status || null,
     };
     const newValMap = new Map();
-    ['username', 'display_name', 'bio', 'avatar'].forEach(field => {
+    ['username', 'display_name', 'bio', 'avatar', 'account_status', 'privacy_status'].forEach(field => {
       const fe = _phistData.filter(e => e.field === field); // newest-first
       fe.forEach((e, fi) => {
         newValMap.set(e, fi === 0 ? _currentVal[field] : fe[fi - 1].old_value);
@@ -4165,8 +4202,9 @@
         </div>`;
       }
 
+      const isStatusField = e.field === 'account_status' || e.field === 'privacy_status';
       const valHtml = (v) => v
-        ? `<div class="phist-value">${esc(v)}</div>`
+        ? `<div class="phist-value">${esc(isStatusField ? (_STATUS_LABELS[v] || v) : v)}</div>`
         : `<div class="phist-value empty">(empty)</div>`;
       return `<div class="phist-entry">
         <div class="phist-entry-hdr"><strong>${esc(fieldLabel)}</strong> <span class="phist-date">· Changed ${dateStr}</span></div>
@@ -4180,6 +4218,7 @@
   }
 
   function _renderColumnHdrs() {
+    if (_modalView === 'grid') return;
     document.getElementById('videoListHdr').innerHTML =
       '<div class="vcols">'
       + VCOLS.map(col => {
@@ -4194,6 +4233,11 @@
   const _dlIcon = `<svg width="13" height="13" viewBox="0 0 13 13" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M6.5 1v7M3.5 5.5l3 3 3-3M1.5 10.5h10"/></svg>`;
 
   const _imgPreviewIcon = `<svg width="13" height="13" viewBox="0 0 13 13" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x=".75" y=".75" width="11.5" height="11.5" rx="1.25"/><circle cx="4.25" cy="4.25" r="1.25"/><path d="M.75 9l3-3 2.5 2.5 2-2 4 4"/></svg>`;
+
+  const _listViewIcon   = `<svg width="13" height="13" viewBox="0 0 13 13" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><line x1="4" y1="3.5" x2="12" y2="3.5"/><line x1="4" y1="6.5" x2="12" y2="6.5"/><line x1="4" y1="9.5" x2="12" y2="9.5"/><circle cx="1.5" cy="3.5" r=".8" fill="currentColor" stroke="none"/><circle cx="1.5" cy="6.5" r=".8" fill="currentColor" stroke="none"/><circle cx="1.5" cy="9.5" r=".8" fill="currentColor" stroke="none"/></svg>`;
+  const _gridViewIcon   = `<svg width="13" height="13" viewBox="0 0 13 13" fill="none" stroke="currentColor" stroke-width="1.5"><rect x=".75" y=".75" width="4.5" height="4.5" rx=".5"/><rect x="7.75" y=".75" width="4.5" height="4.5" rx=".5"/><rect x=".75" y="7.75" width="4.5" height="4.5" rx=".5"/><rect x="7.75" y="7.75" width="4.5" height="4.5" rx=".5"/></svg>`;
+  const _vgridPlayIcon  = `<svg width="12" height="12" viewBox="0 0 9 9" fill="rgba(255,255,255,.9)"><polygon points="1.5,0.5 8.5,4.5 1.5,8.5"/></svg>`;
+  const _vgridPhotoIcon = `<svg width="12" height="12" viewBox="0 0 13 13" fill="none" stroke="rgba(255,255,255,.9)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x=".75" y=".75" width="4.5" height="4.5" rx=".75"/><rect x="7.75" y=".75" width="4.5" height="4.5" rx=".75"/><rect x=".75" y="7.75" width="4.5" height="4.5" rx=".75"/><rect x="7.75" y="7.75" width="4.5" height="4.5" rx=".75"/></svg>`;
 
   const _badgeStyle = `position:absolute;bottom:4px;right:4px;color:#fff;pointer-events:none;display:flex;align-items:center;justify-content:center;filter:drop-shadow(0 1px 2px rgba(0,0,0,.8))`;
   const _playBadge  = `<span style="${_badgeStyle}"><svg width="18" height="18" viewBox="0 0 9 9" fill="currentColor"><polygon points="1.5,0.5 8.5,4.5 1.5,8.5"/></svg></span>`;
@@ -4228,6 +4272,7 @@
   }
 
   function _renderModalVideoList() {
+    if (_modalView === 'grid') { _renderModalVideoGrid(); return; }
     _modalLoaded = 0;
     if (_modalObs) { _modalObs.disconnect(); _modalObs = null; }
     const list = document.getElementById('modalVideoList');
@@ -4235,10 +4280,75 @@
     list.scrollTop = 0;
     const vids = _filteredSorted();
     if (!vids.length) {
-      list.innerHTML = `<div class="vlist-empty">${_modalSearch ? 'No videos match this search.' : 'No videos match this filter.'}</div>`;
+      list.innerHTML = `<div class="vlist-empty">${_modalSearch ? 'No posts match this search.' : 'No posts match this filter.'}</div>`;
       return;
     }
     _appendModalVideos(vids);
+  }
+
+  function _renderModalVideoGrid() {
+    _modalLoaded = 0;
+    if (_modalObs) { _modalObs.disconnect(); _modalObs = null; }
+    const list = document.getElementById('modalVideoList');
+    list.innerHTML = '';
+    list.scrollTop = 0;
+    const vids = _filteredSorted();
+    if (!vids.length) {
+      list.innerHTML = `<div class="vlist-empty">${_modalSearch ? 'No posts match this search.' : 'No posts match this filter.'}</div>`;
+      return;
+    }
+    const grid = document.createElement('div');
+    grid.className = 'video-grid';
+    grid.id = 'videoGrid';
+    list.appendChild(grid);
+    _appendModalGrid(vids);
+  }
+
+  function _appendModalGrid(vids) {
+    const list  = document.getElementById('modalVideoList');
+    const grid  = document.getElementById('videoGrid');
+    if (!grid) return;
+    const batch = vids.slice(_modalLoaded, _modalLoaded + MODAL_PAGE);
+    _modalLoaded += batch.length;
+    batch.forEach(v => {
+      const cell = document.createElement('div');
+      const isMissing = v.status === 'up' && v.pending_deletion_count > 0;
+      const statusCls = v.status === 'deleted'   ? ' deleted'
+                      : v.status === 'undeleted' ? ' undeleted'
+                      : isMissing                ? ' missing'
+                      :                           '';
+      cell.className  = 'vgrid-cell' + statusCls;
+      cell.dataset.videoId = v.video_id;
+      const id        = esc(v.video_id);
+      const viewsHtml = v.view_count != null
+        ? `<span class="vgrid-views">${fmtCount(v.view_count)}</span>`
+        : '<span></span>';
+      const typeIcon  = v.type === 'video' ? _vgridPlayIcon : v.type === 'photo' ? _vgridPhotoIcon : '';
+      cell.innerHTML  = `<img src="/api/videos/${id}/thumbnail" alt="" onerror="this.style.opacity='.15'">
+        <div class="vgrid-overlay">${viewsHtml}${typeIcon}</div>`;
+      if (v.type === 'video')      cell.onclick = () => openVidModal(v.video_id);
+      else if (v.type === 'photo') cell.onclick = () => openCarousel(v.video_id);
+      grid.appendChild(cell);
+    });
+    if (_modalLoaded < vids.length) {
+      const sentinel = document.createElement('div');
+      sentinel.style.height = '1px';
+      list.appendChild(sentinel);
+      _modalObs = new IntersectionObserver(entries => {
+        if (!entries[0].isIntersecting) return;
+        _modalObs.disconnect(); _modalObs = null;
+        sentinel.remove();
+        _appendModalGrid(vids);
+      }, { root: list, rootMargin: '300px' });
+      _modalObs.observe(sentinel);
+    }
+  }
+
+  function setModalView(view) {
+    _modalView = view;
+    document.getElementById('videoListHdr').style.display = view === 'grid' ? 'none' : '';
+    _renderModalToolbar(_modalVideos);
+    _renderModalVideoList();
   }
 
   function _appendModalVideos(vids) {
