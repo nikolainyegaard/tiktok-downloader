@@ -9,6 +9,7 @@ import database as db
 from config import get_ms_token, get_cookies_flat, CHROME_EXECUTABLE, DELETION_CONFIRM_THRESHOLD
 from tiktok_api import fetch_sound_video_ids, get_video_details
 from downloader import download_video, download_photos
+from thumbnailer import generate_thumbnail
 
 _CONFIRM_THRESHOLD = DELETION_CONFIRM_THRESHOLD
 
@@ -117,6 +118,10 @@ async def process_sound(sound: dict, log: Callable[[str], None]) -> None:
                 image_urls=details["image_urls"],
                 upload_date=details["upload_date"],
             )
+            if path:
+                thumb = generate_thumbnail(vid_id, path)
+                if not thumb:
+                    log(f"Thumbnail FAILED for {vid_id} — see [thumb] lines above")
             dl_result = {"file_path": path, "ytdlp_data": None} if path else None
         else:
             log(f"Downloading video {vid_id} from @{author_username}...")

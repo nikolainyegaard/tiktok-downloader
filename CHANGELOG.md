@@ -46,6 +46,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - "Thumbnail OK" no longer logged for each photo post; thumbnail failures are still reported
 
 ### Fixed
+- Photo posts downloaded via sound tracking now have their thumbnail generated; previously `generate_thumbnail` was never called after `download_photos` in the sound loop, causing a persistent 404 on the thumbnail endpoint until the next restart
 - Adding a banned or removed account now shows a clear "is banned or removed on TikTok" error instead of a misleading "missing key 'user' — cookies may be stale" message
 - "X videos found" no longer logged for private accounts where the video fetch is skipped
 - "Profile updates" counter in user modal now uses singular "update" when the count is 1
