@@ -2053,15 +2053,15 @@
   };
 
   function _recentDate(ts) {
-    const d     = new Date(ts * 1000);
-    const now   = new Date();
-    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-    const dDay  = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+    const d        = new Date(ts * 1000);
+    const now      = new Date();
+    const today    = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const dDay     = new Date(d.getFullYear(), d.getMonth(), d.getDate());
     const diffDays = Math.round((today - dDay) / 86400000);
-    const timeStr = d.toLocaleString('en-GB', { hour: '2-digit', minute: '2-digit' });
+    const timeStr  = _dtFmtTime.format(d);
     if (diffDays === 0) return `Today, ${timeStr}`;
     if (diffDays === 1) return `Yesterday, ${timeStr}`;
-    return d.toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+    return _dtFmtRecent.format(d);
   }
 
   function renderRecent(data) {
@@ -3286,16 +3286,16 @@
   }
 
   function _renderSoundModalToolbar(vids) {
-    const counts = {
-      all:      vids.length,
-      active:   vids.filter(v => v.status === 'up').length,
-      deleted:  vids.filter(v => v.status === 'deleted').length,
-      restored: vids.filter(v => v.status === 'undeleted').length,
-    };
-    const typeCounts = {
-      video: vids.filter(v => v.type === 'video').length,
-      photo: vids.filter(v => v.type === 'photo').length,
-    };
+    const counts     = { all: 0, active: 0, deleted: 0, restored: 0 };
+    const typeCounts = { video: 0, photo: 0 };
+    vids.forEach(v => {
+      counts.all++;
+      if      (v.status === 'up')        counts.active++;
+      else if (v.status === 'deleted')   counts.deleted++;
+      else if (v.status === 'undeleted') counts.restored++;
+      if      (v.type === 'video') typeCounts.video++;
+      else if (v.type === 'photo') typeCounts.photo++;
+    });
     const hasMultipleTypes = typeCounts.video > 0 && typeCounts.photo > 0;
 
     const pill = (key, label) => {
@@ -3762,11 +3762,15 @@
     return String(n);
   }
 
+  const _dtFmt          = new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'short', year: 'numeric',
+                                                             hour: '2-digit', minute: '2-digit' });
+  const _dtFmtTime      = new Intl.DateTimeFormat('en-GB', { hour: '2-digit', minute: '2-digit' });
+  const _dtFmtRecent    = new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'short',
+                                                             hour: '2-digit', minute: '2-digit' });
+  const _dtFmtMonthYear = new Intl.DateTimeFormat('en-GB', { month: 'short', year: 'numeric' });
   function fmtDateShort(unix) {
     if (!unix) return '—';
-    const d = new Date(unix * 1000);
-    return d.toLocaleString('en-GB', { day: 'numeric', month: 'short', year: 'numeric',
-                                       hour: '2-digit', minute: '2-digit' });
+    return _dtFmt.format(new Date(unix * 1000));
   }
 
   function openUserModal(tiktokId) {
@@ -4045,8 +4049,7 @@
           : '');
 
     const joinStr = u.join_date
-      ? ' · Joined ' + new Date(u.join_date * 1000)
-          .toLocaleDateString('en-GB', { month: 'short', year: 'numeric' })
+      ? ' · Joined ' + _dtFmtMonthYear.format(new Date(u.join_date * 1000))
       : '';
 
     const banCountdownStr = (() => {
@@ -4293,9 +4296,7 @@
       `<div class="phist-side-hdr"><span class="phist-side-label">${side}</span></div>`;
 
     panel.innerHTML = entries.map(e => {
-      const dateStr = new Date(e.changed_at * 1000)
-        .toLocaleString('en-GB', { day: 'numeric', month: 'short', year: 'numeric',
-                                   hour: '2-digit', minute: '2-digit' });
+      const dateStr = _dtFmt.format(new Date(e.changed_at * 1000));
       const fieldLabel = _PHIST_FIELD_LABELS[e.field] || e.field;
       const newVal = newValMap.get(e);
 
@@ -4366,7 +4367,7 @@
     const id    = esc(v.video_id);
     const badge = v.type === 'video' ? _playBadge : v.type === 'photo' ? _photoBadge : '';
     return `<div style="position:relative;line-height:0;width:90px;flex-shrink:0">
-      <img class="video-thumb" src="/api/videos/${id}/thumbnail" alt=""
+      <img class="video-thumb" src="/api/videos/${id}/thumbnail" alt="" loading="lazy"
            onerror="this.style.opacity='.15'"
            ${_videoThumbAction(v)}>${badge}</div>`;
   }
@@ -4479,20 +4480,17 @@
     const batch = vids.slice(_modalLoaded, _modalLoaded + MODAL_PAGE);
     _modalLoaded += batch.length;
 
-    batch.forEach(v => {
-      const row = document.createElement('div');
-      row.className = 'video-row vcols';
-      row.dataset.videoId = v.video_id;
-      const isMissing    = v.status === 'up' && v.pending_deletion_count > 0;
-      const statusLabel  = v.status === 'deleted'   ? 'Deleted'
-                         : v.status === 'undeleted' ? 'Restored'
-                         : isMissing                ? 'Missing'
-                         :                           'Active';
-      const statusCls    = v.status === 'deleted'   ? 'deleted'
-                         : v.status === 'undeleted' ? 'undeleted'
-                         : isMissing                ? 'missing'
-                         :                           'up';
-      row.innerHTML = `
+    const html = batch.map(v => {
+      const isMissing   = v.status === 'up' && v.pending_deletion_count > 0;
+      const statusLabel = v.status === 'deleted'   ? 'Deleted'
+                        : v.status === 'undeleted' ? 'Restored'
+                        : isMissing                ? 'Missing'
+                        :                           'Active';
+      const statusCls   = v.status === 'deleted'   ? 'deleted'
+                        : v.status === 'undeleted' ? 'undeleted'
+                        : isMissing                ? 'missing'
+                        :                           'up';
+      return `<div class="video-row vcols" data-video-id="${esc(v.video_id)}">
         ${_thumbCell(v)}
         <div style="display:flex;align-items:flex-start;gap:4px;min-width:0">
           <button class="play-btn" onclick="event.stopPropagation();openImgModal('${esc(v.video_id)}')" title="Preview thumbnail">${_imgPreviewIcon}</button>
@@ -4510,9 +4508,9 @@
         <div class="video-cell" style="padding:0;display:flex;align-items:center;justify-content:center;gap:2px">
           ${_videoActionBtns(v)}
         </div>
-      `;
-      list.appendChild(row);
-    });
+      </div>`;
+    }).join('');
+    list.insertAdjacentHTML('beforeend', html);
 
     if (_modalLoaded < vids.length) {
       const sentinel = document.createElement('div');
