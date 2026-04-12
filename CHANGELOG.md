@@ -13,8 +13,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Performance
 - User modal: video thumbnails are now lazy-loaded, reducing the initial network burst to only visible rows
-- User modal: `Intl.DateTimeFormat` formatter is created once and reused across all rows instead of per-call
-- User modal: video rows are now batch-inserted with a single `insertAdjacentHTML` call instead of one `appendChild` per row
+- All date formatting now uses cached `Intl.DateTimeFormat` instances instead of constructing a formatter on every call (`fmtDateShort`, `_recentDate`, modal header join date, profile history entries)
+- User and sound modal: video rows batch-inserted with a single `insertAdjacentHTML` call instead of one `appendChild` per row
+- User and sound modal toolbars: status/type counts computed in a single `forEach` pass instead of five separate `.filter()` calls
+- User modal toolbar: `_filteredSorted` results cached to avoid computing the sorted list twice per toolbar render
+- `renderStatus` (runs every 5 s): DOM element references cached at startup instead of re-queried on every tick
 - Page no longer renders wider than the viewport on mobile; the Track a Sound label input and the filter tabs + search row were each wider than the viewport, forcing the CSS grid to expand and clip all content on the right
 - Track a sound: label input hidden on mobile
 - Filter tabs: pills and search wrap to separate rows on mobile; search goes full-width below the pills
