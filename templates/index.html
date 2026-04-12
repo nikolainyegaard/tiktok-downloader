@@ -2788,6 +2788,9 @@
   function resetUserFilters() {
     userSort   = { field: 'username', dir: 'asc' };
     userFilter = { priv: 'all', stat: 'all' };
+    _trackingSearch = '';
+    const searchEl = document.getElementById('trackingSearch');
+    if (searchEl) searchEl.value = '';
     const sel = document.getElementById('userSortField');
     if (sel) sel.value = 'username';
     _updateUserSortBtn();
