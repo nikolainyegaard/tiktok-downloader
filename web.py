@@ -770,6 +770,28 @@ def create_app() -> Flask:
         db.set_user_comment(tiktok_id, comment.strip())
         return jsonify({"ok": True})
 
+    @app.route("/api/users/<tiktok_id>/star", methods=["PATCH"])
+    def set_user_star(tiktok_id: str):
+        if not db.get_user(tiktok_id):
+            return jsonify({"error": "User not found"}), 404
+        body    = request.get_json(silent=True) or {}
+        starred = body.get("starred")
+        if not isinstance(starred, bool):
+            return jsonify({"error": "starred must be a boolean"}), 400
+        db.set_user_starred(tiktok_id, starred)
+        return jsonify({"ok": True})
+
+    @app.route("/api/sounds/<sound_id>/star", methods=["PATCH"])
+    def set_sound_star(sound_id: str):
+        if not db.get_sound(sound_id):
+            return jsonify({"error": "Sound not found"}), 404
+        body    = request.get_json(silent=True) or {}
+        starred = body.get("starred")
+        if not isinstance(starred, bool):
+            return jsonify({"error": "starred must be a boolean"}), 400
+        db.set_sound_starred(sound_id, starred)
+        return jsonify({"ok": True})
+
     @app.route("/api/sounds/<sound_id>/tracking", methods=["PATCH"])
     def set_sound_tracking(sound_id: str):
         if not db.get_sound(sound_id):
