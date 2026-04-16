@@ -433,7 +433,6 @@
       border: 1px solid var(--border);
       border-radius: 7px;
       color: var(--text-dim);
-      font-size: 15px; font-weight: 600;
       cursor: pointer;
       display: flex; align-items: center; justify-content: center;
       transition: background .15s, color .15s;
@@ -1368,6 +1367,12 @@
   </style>
 </head>
 <body>
+<svg style="display:none" aria-hidden="true">
+  <symbol id="icon-close" viewBox="0 0 14 14" fill="none">
+    <line x1="2" y1="2" x2="12" y2="12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+    <line x1="12" y1="2" x2="2" y2="12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+  </symbol>
+</svg>
 <div class="app">
 
   <!-- Header -->
@@ -1592,7 +1597,7 @@
 <!-- Settings modal -->
 <div id="settingsBackdrop" class="modal-backdrop" style="display:none;z-index:200" onclick="if(event.target===this)closeSettings()">
   <div class="settings-modal">
-    <button class="modal-close" onclick="closeSettings()">✕</button>
+    <button class="modal-close" onclick="closeSettings()"><svg width="14" height="14" aria-hidden="true"><use href="#icon-close"/></svg></button>
     <nav class="settings-nav">
       <div class="settings-nav-item active" id="snav-cookies"   onclick="switchSettingsSection('cookies')">Cookies</div>
       <div class="settings-nav-item"        id="snav-loops"     onclick="switchSettingsSection('loops')">Loops</div>
@@ -1909,7 +1914,7 @@
 <!-- Image preview modal -->
 <div id="imgModal" class="media-modal" style="display:none" onclick="if(event.target===this)closeImgModal()">
   <div class="media-modal-inner">
-    <button class="media-modal-close" onclick="closeImgModal()">✕</button>
+    <button class="media-modal-close" onclick="closeImgModal()"><svg width="14" height="14" aria-hidden="true"><use href="#icon-close"/></svg></button>
     <img id="imgModalImg" src="" alt="">
   </div>
 </div>
@@ -1917,7 +1922,7 @@
 <!-- Video player modal -->
 <div id="vidModal" class="media-modal" style="display:none" onclick="if(event.target===this)closeVidModal()">
   <div class="media-modal-inner">
-    <button class="media-modal-close" onclick="closeVidModal()">✕</button>
+    <button class="media-modal-close" onclick="closeVidModal()"><svg width="14" height="14" aria-hidden="true"><use href="#icon-close"/></svg></button>
     <video id="vidModalPlayer" controls autoplay></video>
   </div>
 </div>
@@ -1925,7 +1930,7 @@
 <!-- Photo carousel modal -->
 <div id="carouselModal" class="media-modal" style="display:none" onclick="if(event.target===this)closeCarousel()">
   <div class="carousel-inner">
-    <button class="media-modal-close" onclick="closeCarousel()">✕</button>
+    <button class="media-modal-close" onclick="closeCarousel()"><svg width="14" height="14" aria-hidden="true"><use href="#icon-close"/></svg></button>
     <button class="carousel-nav" id="carouselPrev" onclick="carouselStep(-1)">&#8249;</button>
     <img id="carouselImg" src="" alt="">
     <button class="carousel-nav" id="carouselNext" onclick="carouselStep(1)">&#8250;</button>
@@ -1936,7 +1941,7 @@
 <!-- User detail modal -->
 <div id="reportViewBackdrop" class="modal-backdrop" style="display:none;z-index:210" onclick="if(event.target===this)closeReportView()">
   <div class="report-view-modal">
-    <button class="modal-close" onclick="closeReportView()">&#x2715;</button>
+    <button class="modal-close" onclick="closeReportView()"><svg width="14" height="14" aria-hidden="true"><use href="#icon-close"/></svg></button>
     <div class="report-view-hdr">
       <span id="reportViewTitle"></span>
       <span class="report-view-hdr-sub" id="reportViewSub"></span>
@@ -1947,7 +1952,7 @@
 
 <div id="recentLogBackdrop" class="modal-backdrop" style="display:none;z-index:190" onclick="if(event.target===this)closeRecentLog()">
   <div class="recent-log-modal">
-    <button class="modal-close" onclick="closeRecentLog()">✕</button>
+    <button class="modal-close" onclick="closeRecentLog()"><svg width="14" height="14" aria-hidden="true"><use href="#icon-close"/></svg></button>
     <div class="recent-log-modal-hdr" id="recentLogTitle"></div>
     <div class="recent-log-modal-body" id="recentLogBody"></div>
   </div>
@@ -1955,7 +1960,7 @@
 
 <div id="modalBackdrop" class="modal-backdrop" style="display:none" onclick="handleBackdropClick(event)">
   <div class="modal">
-    <button class="modal-close" onclick="closeModal()">✕</button>
+    <button class="modal-close" onclick="closeModal()"><svg width="14" height="14" aria-hidden="true"><use href="#icon-close"/></svg></button>
     <div class="modal-header"  id="modalHeader"></div>
     <div class="modal-toolbar" id="modalToolbar"></div>
     <div class="phist-panel"    id="phistPanel" style="display:none"></div>
@@ -1966,7 +1971,7 @@
 <!-- Sound detail modal -->
 <div id="soundModalBackdrop" class="modal-backdrop" style="display:none" onclick="if(event.target===this)closeSoundModal()">
   <div class="modal">
-    <button class="modal-close" onclick="closeSoundModal()">✕</button>
+    <button class="modal-close" onclick="closeSoundModal()"><svg width="14" height="14" aria-hidden="true"><use href="#icon-close"/></svg></button>
     <div class="modal-header"   id="soundModalHeader"></div>
     <div class="modal-toolbar"  id="soundModalToolbar"></div>
     <div class="modal-video-list" id="soundModalVideoList"></div>
