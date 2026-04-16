@@ -621,7 +621,6 @@
       border-bottom: 1px solid var(--border);
       flex-shrink: 0;
       background: var(--surface);
-      overflow-x: hidden;
     }
 
     .col-hdr {
@@ -651,7 +650,8 @@
     .author-chip:hover { background: rgba(79,142,247,.28); }
     .author-chip.untracked { background: var(--surface2); color: var(--muted); cursor: default; }
 
-    .modal-video-list { flex: 1; overflow-y: auto; }
+    #modalListWrap, #soundListWrap { flex: 1; overflow-x: auto; display: flex; flex-direction: column; }
+    .modal-video-list { flex: 1; overflow-y: auto; overflow-x: clip; }
 
     .video-row {
       padding: 7px 10px;
@@ -1944,8 +1944,10 @@
     <div class="modal-header"  id="modalHeader"></div>
     <div class="modal-toolbar" id="modalToolbar"></div>
     <div class="phist-panel"    id="phistPanel" style="display:none"></div>
-    <div class="video-list-hdr" id="videoListHdr"></div>
-    <div class="modal-video-list" id="modalVideoList"></div>
+    <div id="modalListWrap">
+      <div class="video-list-hdr" id="videoListHdr"></div>
+      <div class="modal-video-list" id="modalVideoList"></div>
+    </div>
   </div>
 </div>
 
@@ -1955,8 +1957,10 @@
     <button class="modal-close" onclick="closeSoundModal()">✕</button>
     <div class="modal-header"   id="soundModalHeader"></div>
     <div class="modal-toolbar"  id="soundModalToolbar"></div>
-    <div class="video-list-hdr" id="soundVideoListHdr"></div>
-    <div class="modal-video-list" id="soundModalVideoList"></div>
+    <div id="soundListWrap">
+      <div class="video-list-hdr" id="soundVideoListHdr"></div>
+      <div class="modal-video-list" id="soundModalVideoList"></div>
+    </div>
   </div>
 </div>
 
@@ -3976,6 +3980,7 @@
     _phistField  = 'all';
     _phistUserId = null;
     document.getElementById('phistPanel').style.display     = 'none';
+    document.getElementById('modalListWrap').style.display  = '';
     document.getElementById('videoListHdr').style.display   = _modalView === 'grid' ? 'none' : '';
     document.getElementById('modalVideoList').style.display = '';
 
@@ -4403,6 +4408,7 @@
     }
 
     document.getElementById('phistPanel').style.display = '';
+    document.getElementById('modalListWrap').style.display  = 'none';
     document.getElementById('videoListHdr').style.display  = 'none';
     document.getElementById('modalVideoList').style.display = 'none';
     document.getElementById('phistPanel').innerHTML = '<div class="phist-empty">Loading…</div>';
@@ -4423,6 +4429,7 @@
 
   function _closeProfileHistory() {
     document.getElementById('phistPanel').style.display     = 'none';
+    document.getElementById('modalListWrap').style.display  = '';
     document.getElementById('videoListHdr').style.display   = _modalView === 'grid' ? 'none' : '';
     document.getElementById('modalVideoList').style.display = '';
     if (_modalVideos.length) {
@@ -4817,14 +4824,6 @@
   }
 
   // ── Init ──────────────────────────────────────────────────────────────────────
-
-  // Sync column header horizontal scroll with the video list
-  document.getElementById('modalVideoList').addEventListener('scroll', function() {
-    document.getElementById('videoListHdr').scrollLeft = this.scrollLeft;
-  });
-  document.getElementById('soundModalVideoList').addEventListener('scroll', function() {
-    document.getElementById('soundVideoListHdr').scrollLeft = this.scrollLeft;
-  });
 
   resetUserFilters();   // clear any browser-restored form state
   _initAllGliders();
