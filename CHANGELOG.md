@@ -11,12 +11,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Star button on user and sound cards: outline/grey when unset, solid yellow-orange when starred; persisted in the database
 - Starred filter pill for users (All / Starred) and sounds (All / Starred)
 - Starred sort option for users; sort controls for sounds (Label, Starred, Saved videos, Date added)
+- Track a user: compact input bar pinned above the stats/recent panels on mobile
+- User and sound modal: column headers are sticky and scroll horizontally in sync with the video rows on mobile
+- User and sound modal: toolbar collapses on mobile to a single row (view toggle, post count, Profile History); filter pills expand via a "Filters" toggle button
 
 ### Changed
 - Recent entries: detail text shows the full video ID instead of a truncated value
 - User modal: opens in grid view by default on mobile; switches to list view automatically when a specific video needs to be highlighted
 - User modal header: compact layout on mobile with avatar and name on one row; handle, ID, bio, and stats below
 - Bio in user modal: collapsed to a single truncated line by default; tap to expand inline, tap again to collapse
+- Close buttons across all modals unified to a rounded-square style with a CSS-drawn X; consistent size and shape everywhere
 
 ### Fixed
 - Private filter no longer matches banned users whose privacy_status was set before the ban
@@ -26,6 +30,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Escape key now dismisses modals in the correct order: sound detail, then user detail, then recent log
 - Log clear state persists across page reloads; cleared position saved to localStorage and restored on load
 - Filter pills in user/sound modal toolbar no longer stretch to fill the full row width on mobile
+- Clicking a column header to sort no longer resets the horizontal scroll position in video modals
+- Filter pills (All/Active/etc.) now correctly show their active state when the filter row is first expanded on mobile
 
 ### Performance
 - User modal: video thumbnails are now lazy-loaded, reducing the initial network burst to only visible rows

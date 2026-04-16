@@ -247,6 +247,7 @@
       pointer-events: none;
     }
 
+    .mobile-add-user-bar { display: none; }
     .add-status { font-size: 13px; padding: 4px 0; min-height: 20px; }
     .add-status.error { color: var(--red); }
     .add-status.ok    { color: var(--green); }
@@ -1365,6 +1366,10 @@
       .video-row.vcols, .video-row.sound-vcols,
       #modalVideoList .video-list-hdr, #soundModalVideoList .video-list-hdr { min-width: max-content; }
 
+      /* Track a user: compact bar above stats panel; hide original form */
+      .mobile-add-user-bar { display: flex; gap: 8px; align-items: center; }
+      .track-panels > section:first-child { display: none; }
+
       /* Collapsible modal toolbar on mobile */
       .modal-toolbar { flex-direction: column; align-items: stretch; padding: 8px 12px; gap: 6px; }
       .toolbar-main-row { flex: none; gap: 8px; }
@@ -1396,6 +1401,20 @@
       <button class="btn-gear" onclick="openSettings('cookies')" title="Settings">⚙</button>
     </div>
   </header>
+
+  <!-- Mobile add-user bar: shown above stats on mobile, hidden on desktop -->
+  <div class="mobile-add-user-bar">
+    <div
+      class="handle-input"
+      id="handleInputMobile"
+      contenteditable="true"
+      role="textbox"
+      aria-label="TikTok username"
+      data-placeholder="@username"
+      spellcheck="false"
+    ></div>
+    <button class="btn-primary" onclick="addUserMobile()">Add</button>
+  </div>
 
   <!-- Top panels: Stats (1/3) + Recent (2/3) -->
   <div class="top-panels">
@@ -3122,6 +3141,27 @@
     const text = (e.clipboardData || window.clipboardData).getData('text/plain');
     document.execCommand('insertText', false, text);
   });
+
+  // Mobile add-user bar
+  document.getElementById('handleInputMobile').addEventListener('input', function() {
+    _sanitiseHandle(this);
+  });
+  document.getElementById('handleInputMobile').addEventListener('keydown', function(e) {
+    if (e.key === 'Enter') { e.preventDefault(); addUserMobile(); }
+  });
+  document.getElementById('handleInputMobile').addEventListener('paste', function(e) {
+    e.preventDefault();
+    const text = (e.clipboardData || window.clipboardData).getData('text/plain');
+    document.execCommand('insertText', false, text);
+  });
+
+  async function addUserMobile() {
+    const m = document.getElementById('handleInputMobile');
+    document.getElementById('handleInput').textContent = m.textContent;
+    m.textContent = '';
+    await addUser();
+    m.focus();
+  }
 
   async function addUser() {
     const input = document.getElementById('handleInput');
