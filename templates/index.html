@@ -621,6 +621,7 @@
       border-bottom: 1px solid var(--border);
       flex-shrink: 0;
       background: var(--surface);
+      min-width: max-content;
     }
 
     .col-hdr {
@@ -651,7 +652,7 @@
     .author-chip.untracked { background: var(--surface2); color: var(--muted); cursor: default; }
 
     #modalListWrap, #soundListWrap { flex: 1; overflow-x: auto; display: flex; flex-direction: column; }
-    .modal-video-list { flex: 1; overflow-y: auto; overflow-x: clip; }
+    .modal-video-list { flex: 1; overflow-y: auto; overflow-x: clip; min-width: max-content; }
 
     .video-row {
       padding: 7px 10px;
@@ -4668,6 +4669,7 @@
 
   function setModalView(view) {
     _modalView = view;
+    if (view === 'list') _renderColumnHdrs();
     document.getElementById('videoListHdr').style.display = view === 'grid' ? 'none' : '';
     const toolbar = document.getElementById('modalToolbar');
     toolbar.querySelectorAll('[data-view-key]').forEach(btn => {
