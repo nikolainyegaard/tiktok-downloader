@@ -1964,6 +1964,7 @@
   let logLines      = [];
   let _deletionConfirmThreshold = 3;  // synced from /api/status
   let logClearIndex = 0;
+  let _logClearRestored = false;
   let pending       = {};
   const dismissed   = new Set();
   let runQueue      = [];   // tiktok_ids queued for manual run
@@ -2278,9 +2279,9 @@
         row.className = 'recent-entry';
         row.title = `Open @${g.username}`;
         if (g.enabled !== 0) {
-          row.onclick = () => { closeRecentLog(); openUserModal(g.tiktok_id); };
+          row.onclick = () => { openUserModal(g.tiktok_id); };
         } else if (g.sound_id) {
-          row.onclick = () => { closeRecentLog(); openSoundModalAndHighlight(g.sound_id, g.video_id); };
+          row.onclick = () => { openSoundModalAndHighlight(g.sound_id, g.video_id); };
         }
         row.innerHTML = `
           <span class="recent-date">${_recentDate(g.download_date)}</span>
@@ -2296,9 +2297,9 @@
         if (_recentLogType === 'deletions') {
           row.title = `Open @${item.username}`;
           if (item.enabled !== 0) {
-            row.onclick = () => { closeRecentLog(); openUserModalAndHighlight(item.tiktok_id, item.video_id); };
+            row.onclick = () => { openUserModalAndHighlight(item.tiktok_id, item.video_id); };
           } else if (item.sound_id) {
-            row.onclick = () => { closeRecentLog(); openSoundModalAndHighlight(item.sound_id, item.video_id, 'deleted'); };
+            row.onclick = () => { openSoundModalAndHighlight(item.sound_id, item.video_id, 'deleted'); };
           }
           row.innerHTML = `
             <span class="recent-date">${_recentDate(item.deleted_at)}</span>
@@ -2307,14 +2308,14 @@
         } else if (_recentLogType === 'profile-changes') {
           const label = _FIELD_LABELS[item.field] || item.field;
           row.title = `Open @${item.username} · ${label} history`;
-          row.onclick = () => { closeRecentLog(); openUserModalWithHistory(item.tiktok_id, item.field); };
+          row.onclick = () => { openUserModalWithHistory(item.tiktok_id, item.field); };
           row.innerHTML = `
             <span class="recent-date">${_recentDate(item.changed_at)}</span>
             <span class="recent-name">@${esc(item.username)}</span>
             <span class="recent-detail">${esc(label)}</span>`;
         } else {
           row.title = `Open @${item.username}`;
-          row.onclick = () => { closeRecentLog(); openUserModal(item.tiktok_id); };
+          row.onclick = () => { openUserModal(item.tiktok_id); };
           row.innerHTML = `
             <span class="recent-date">${_recentDate(item.banned_at)}</span>
             <span class="recent-name">@${esc(item.username)}</span>
@@ -3714,10 +3715,24 @@
   function clearLog() {
     logClearIndex = logLines.length;
     document.getElementById('logBody').innerHTML = '';
+    if (logLines.length > 0) {
+      localStorage.setItem('logClearWatermark', logLines[logLines.length - 1]);
+    } else {
+      localStorage.removeItem('logClearWatermark');
+    }
   }
 
   function renderLogs(lines) {
     if (!lines?.length) return;
+    if (!_logClearRestored) {
+      _logClearRestored = true;
+      const mark = localStorage.getItem('logClearWatermark');
+      if (mark) {
+        for (let i = lines.length - 1; i >= 0; i--) {
+          if (lines[i] === mark) { logClearIndex = i + 1; break; }
+        }
+      }
+    }
     const start    = Math.max(logLines.length, logClearIndex);
     const newLines = lines.slice(start);
     logLines = lines;
@@ -3917,6 +3932,7 @@
     _modalSearch     = '';
     _modalSort       = { field: 'upload_date', dir: 'desc' };
     _modalLoaded     = 0;
+    if (window.innerWidth <= 640) _modalView = 'grid';
     if (_modalObs) { _modalObs.disconnect(); _modalObs = null; }
 
     // Reset history panel state
@@ -3981,14 +3997,14 @@
     if (document.getElementById('vidModal').style.display !== 'none') {
       closeVidModal(); return;
     }
-    if (document.getElementById('recentLogBackdrop').style.display !== 'none') {
-      closeRecentLog(); return;
-    }
     if (document.getElementById('soundModalBackdrop').style.display !== 'none') {
       closeSoundModal(); return;
     }
     if (document.getElementById('modalBackdrop').style.display !== 'none') {
       closeModal(); return;
+    }
+    if (document.getElementById('recentLogBackdrop').style.display !== 'none') {
+      closeRecentLog(); return;
     }
     if (document.getElementById('settingsBackdrop').style.display !== 'none') {
       closeSettings();
@@ -4076,6 +4092,8 @@
     if (_modalPendingHighlight) {
       const { videoId, filter, sortField, sortDir } = _modalPendingHighlight;
       _modalPendingHighlight = null;
+      _modalView       = 'list';
+      document.getElementById('videoListHdr').style.display = '';
       _modalFilter     = filter;
       _modalTypeFilter = 'all';
       _modalSort       = { field: sortField, dir: sortDir };
