@@ -1289,10 +1289,9 @@
       header { gap: 6px 12px; }
       .header-meta { margin-left: 0; width: 100%; }
 
-      /* Recent entries: hide the detail column — white-space:nowrap makes its auto
-         track width equal the untruncated string, which overflows the panel. */
-      .recent-entry { grid-template-columns: 88px minmax(0, 1fr); }
-      .recent-detail { display: none; }
+      /* Recent entries: give detail column a bounded max-width so it truncates
+         cleanly instead of overflowing the panel. */
+      .recent-entry { grid-template-columns: 80px minmax(0, 1fr) minmax(0, 90px); }
 
       /* Track a sound: label input overflows the row on mobile. */
       #soundLabelInput { display: none; }
