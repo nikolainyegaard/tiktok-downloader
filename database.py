@@ -158,6 +158,8 @@ def _migrate_db(conn):
         "ALTER TABLE videos ADD COLUMN stats_updated_at   INTEGER",
         "ALTER TABLE users  ADD COLUMN avatar_cached      INTEGER NOT NULL DEFAULT 0",
         "ALTER TABLE users  ADD COLUMN comment            TEXT",
+        "ALTER TABLE users  ADD COLUMN starred            INTEGER NOT NULL DEFAULT 0",
+        "ALTER TABLE sounds ADD COLUMN starred            INTEGER NOT NULL DEFAULT 0",
     ]
     for sql in migrations:
         try:
@@ -237,6 +239,22 @@ def set_user_comment(tiktok_id: str, comment: str) -> None:
         conn.execute(
             "UPDATE users SET comment = ? WHERE tiktok_id = ?",
             (comment or None, tiktok_id),
+        )
+
+
+def set_user_starred(tiktok_id: str, starred: bool) -> None:
+    with get_db() as conn:
+        conn.execute(
+            "UPDATE users SET starred = ? WHERE tiktok_id = ?",
+            (1 if starred else 0, tiktok_id),
+        )
+
+
+def set_sound_starred(sound_id: str, starred: bool) -> None:
+    with get_db() as conn:
+        conn.execute(
+            "UPDATE sounds SET starred = ? WHERE sound_id = ?",
+            (1 if starred else 0, sound_id),
         )
 
 

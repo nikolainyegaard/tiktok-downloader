@@ -108,6 +108,10 @@
     .btn-run { background: transparent; color: var(--accent); border: 1px solid var(--accent); padding: 5px 10px; font-size: 12px; }
     .btn-run:hover:not(:disabled) { background: rgba(79,142,247,.12); }
 
+    .btn-star { background: transparent; color: var(--muted); border: 1px solid var(--border); padding: 5px 8px; font-size: 14px; line-height: 1; }
+    .btn-star:hover { color: #f5a623; border-color: #f5a623; }
+    .btn-star.starred { color: #f5a623; border-color: #f5a623; }
+
     .btn-ghost { background: var(--surface2); color: var(--text); }
     .btn-ghost:hover:not(:disabled) { background: var(--border); }
 
@@ -1470,6 +1474,13 @@
           </div>
         </div>
         <div style="display:flex;align-items:center;gap:4px;">
+          <span style="font-size:11px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--muted);">Starred</span>
+          <div class="filter-pills">
+            <button class="filter-pill active" id="ufStarAll"     onclick="setUserFilter('star','all')">All</button>
+            <button class="filter-pill"        id="ufStarStarred" onclick="setUserFilter('star','starred')">Starred</button>
+          </div>
+        </div>
+        <div style="display:flex;align-items:center;gap:4px;">
           <span style="font-size:11px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--muted);">Sort</span>
           <select class="sort-select" id="userSortField" onchange="setUserSortField(this.value)">
             <option value="username">Username</option>
@@ -1478,9 +1489,30 @@
             <option value="video_total">Saved videos</option>
             <option value="video_deleted">Deleted videos</option>
             <option value="added_at">Date added</option>
+            <option value="starred">Starred</option>
           </select>
           <button class="sort-dir-btn" id="userSortDirBtn" onclick="toggleUserSortDir()">A → Z</button>
           <button class="sort-dir-btn" onclick="resetUserFilters()" title="Reset all filters and sort to default">Reset</button>
+        </div>
+      </div>
+      <div id="soundControls" style="display:none;align-items:center;gap:10px;flex-wrap:wrap;">
+        <div style="display:flex;align-items:center;gap:4px;">
+          <span style="font-size:11px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--muted);">Starred</span>
+          <div class="filter-pills">
+            <button class="filter-pill active" id="sfStarAll"     onclick="setSoundFilter('star','all')">All</button>
+            <button class="filter-pill"        id="sfStarStarred" onclick="setSoundFilter('star','starred')">Starred</button>
+          </div>
+        </div>
+        <div style="display:flex;align-items:center;gap:4px;">
+          <span style="font-size:11px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--muted);">Sort</span>
+          <select class="sort-select" id="soundSortField" onchange="setSoundSortField(this.value)">
+            <option value="label">Label</option>
+            <option value="starred">Starred</option>
+            <option value="video_count">Saved videos</option>
+            <option value="added_at">Date added</option>
+          </select>
+          <button class="sort-dir-btn" id="soundSortDirBtn" onclick="toggleSoundSortDir()">A → Z</button>
+          <button class="sort-dir-btn" onclick="resetSoundFilters()" title="Reset all filters and sort to default">Reset</button>
         </div>
       </div>
     </div>
@@ -1938,7 +1970,7 @@
   let runQueue      = [];   // tiktok_ids queued for manual run
   let runCurrent    = null; // tiktok_id currently being run manually
   let userSort      = { field: 'username', dir: 'asc' };
-  let userFilter    = { priv: 'all', stat: 'all' };
+  let userFilter    = { priv: 'all', stat: 'all', star: 'all' };
 
   // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -2735,12 +2767,15 @@
   // ── Users ─────────────────────────────────────────────────────────────────────
 
   const _SORT_DIR_LABELS = {
-    username:       { asc: 'A → Z',        desc: 'Z → A'        },
-    display_name:   { asc: 'A → Z',        desc: 'Z → A'        },
-    follower_count: { asc: 'Low → High',   desc: 'High → Low'   },
-    video_total:    { asc: 'Low → High',   desc: 'High → Low'   },
-    video_deleted:  { asc: 'Low → High',   desc: 'High → Low'   },
-    added_at:       { asc: 'Oldest first', desc: 'Newest first' },
+    username:       { asc: 'A → Z',           desc: 'Z → A'           },
+    display_name:   { asc: 'A → Z',           desc: 'Z → A'           },
+    follower_count: { asc: 'Low → High',      desc: 'High → Low'      },
+    video_total:    { asc: 'Low → High',      desc: 'High → Low'      },
+    video_deleted:  { asc: 'Low → High',      desc: 'High → Low'      },
+    added_at:       { asc: 'Oldest first',    desc: 'Newest first'    },
+    starred:        { asc: 'Unstarred first', desc: 'Starred first'   },
+    label:          { asc: 'A → Z',           desc: 'Z → A'           },
+    video_count:    { asc: 'Low → High',      desc: 'High → Low'      },
   };
 
   // ── Scroll lock ───────────────────────────────────────────────────────────────
@@ -2764,6 +2799,7 @@
     document.getElementById('soundsGrid').style.display = view === 'sounds' ? '' : 'none';
     document.getElementById('logPanel').style.display   = view === 'log'    ? '' : 'none';
     document.getElementById('userControls').style.visibility = view === 'users' ? '' : 'hidden';
+    document.getElementById('soundControls').style.display   = view === 'sounds' ? 'flex' : 'none';
     renderUsers();
     renderSounds();
     _placeGlider(document.getElementById('tvUsers').closest('.filter-pills'));
@@ -2779,12 +2815,13 @@
     userFilter[group] = value;
     const privIds = { all: 'ufPrivAll', public: 'ufPrivPublic', private: 'ufPrivPrivate', banned: 'ufPrivBanned' };
     const statIds = { all: 'ufStatAll', active: 'ufStatActive', inactive: 'ufStatInactive' };
-    const map = group === 'priv' ? privIds : statIds;
+    const starIds = { all: 'ufStarAll', starred: 'ufStarStarred' };
+    const map     = group === 'priv' ? privIds : group === 'stat' ? statIds : starIds;
     Object.entries(map).forEach(([v, id]) => {
       document.getElementById(id)?.classList.toggle('active', v === value);
     });
     renderUsers();
-    const anchorId = group === 'priv' ? 'ufPrivAll' : 'ufStatAll';
+    const anchorId = group === 'priv' ? 'ufPrivAll' : group === 'stat' ? 'ufStatAll' : 'ufStarAll';
     _placeGlider(document.getElementById(anchorId).closest('.filter-pills'));
   }
 
@@ -2797,7 +2834,7 @@
 
   function resetUserFilters() {
     userSort   = { field: 'username', dir: 'asc' };
-    userFilter = { priv: 'all', stat: 'all' };
+    userFilter = { priv: 'all', stat: 'all', star: 'all' };
     _trackingSearch = '';
     const searchEl = document.getElementById('trackingSearch');
     if (searchEl) searchEl.value = '';
@@ -2806,11 +2843,14 @@
     _updateUserSortBtn();
     const privIds = { all: 'ufPrivAll', public: 'ufPrivPublic', private: 'ufPrivPrivate', banned: 'ufPrivBanned' };
     const statIds = { all: 'ufStatAll', active: 'ufStatActive', inactive: 'ufStatInactive' };
+    const starIds = { all: 'ufStarAll', starred: 'ufStarStarred' };
     Object.entries(privIds).forEach(([v, id]) => document.getElementById(id)?.classList.toggle('active', v === 'all'));
     Object.entries(statIds).forEach(([v, id]) => document.getElementById(id)?.classList.toggle('active', v === 'all'));
+    Object.entries(starIds).forEach(([v, id]) => document.getElementById(id)?.classList.toggle('active', v === 'all'));
     renderUsers();
     _placeGlider(document.getElementById('ufPrivAll').closest('.filter-pills'));
     _placeGlider(document.getElementById('ufStatAll').closest('.filter-pills'));
+    _placeGlider(document.getElementById('ufStarAll').closest('.filter-pills'));
   }
 
   function toggleUserSortDir() {
@@ -2832,6 +2872,7 @@
       if (userFilter.priv === 'banned'   && u.account_status !== 'banned') return false;
       if (userFilter.stat === 'active'   && u.tracking_enabled === 0) return false;
       if (userFilter.stat === 'inactive' && u.tracking_enabled !== 0) return false;
+      if (userFilter.star === 'starred'  && !u.starred) return false;
       if (q) {
         const hay = `${u.username || ''} ${u.display_name || ''} ${u.tiktok_id || ''}`.toLowerCase();
         if (!hay.includes(q)) return false;
@@ -2861,7 +2902,7 @@
   function renderUsers() {
     const grid     = document.getElementById('usersGrid');
     const filtered = _filteredUsers();
-    const isFiltered = userFilter.priv !== 'all' || userFilter.stat !== 'all' || !!_trackingSearch;
+    const isFiltered = userFilter.priv !== 'all' || userFilter.stat !== 'all' || userFilter.star !== 'all' || !!_trackingSearch;
     document.getElementById('userCount').textContent =
       isFiltered ? `${filtered.length} of ${users.length}` : users.length;
     const _tvPills = document.getElementById('tvUsers')?.closest('.filter-pills');
@@ -2945,6 +2986,7 @@
           <div class="user-card-footer">
             <span class="user-checked">${checked}</span>
             <div style="display:flex;gap:6px;">
+              <button class="btn-star${u.starred ? ' starred' : ''}" onclick="event.stopPropagation();toggleUserStar('${esc(u.tiktok_id)}')" title="${u.starred ? 'Unstar' : 'Star'}">${u.starred ? '★' : '☆'}</button>
               <button class="btn-run" ${runDisabled} onclick="event.stopPropagation();runUser('${esc(u.tiktok_id)}')">${runLabel}</button>
               <button class="btn-danger" onclick="event.stopPropagation();removeUser('${esc(u.tiktok_id)}','@${esc(u.username)}')">Remove</button>
             </div>
@@ -3061,6 +3103,19 @@
     loadUsers();
   }
 
+  async function toggleUserStar(tiktokId) {
+    const user = users.find(u => u.tiktok_id === tiktokId);
+    if (!user) return;
+    const newVal = !user.starred;
+    user.starred = newVal ? 1 : 0;
+    renderUsers();
+    await apiJSON(`/api/users/${tiktokId}/star`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ starred: newVal }),
+    });
+  }
+
   async function loadUsers() {
     const { ok, data } = await apiJSON('/api/users');
     if (ok) { users = data; renderUsers(); }
@@ -3071,15 +3126,72 @@
   let sounds        = [];
   let soundRunCurrent = null;
   let soundRunQueue   = [];
+  let soundFilter   = { star: 'all' };
+  let soundSort     = { field: 'label', dir: 'asc' };
+
+  function setSoundFilter(group, value) {
+    soundFilter[group] = value;
+    const starIds = { all: 'sfStarAll', starred: 'sfStarStarred' };
+    const map     = starIds;
+    Object.entries(map).forEach(([v, id]) => {
+      document.getElementById(id)?.classList.toggle('active', v === value);
+    });
+    renderSounds();
+    _placeGlider(document.getElementById('sfStarAll').closest('.filter-pills'));
+  }
+
+  function setSoundSortField(field) {
+    soundSort.field = field;
+    soundSort.dir   = (field === 'label') ? 'asc' : 'desc';
+    _updateSoundSortBtn();
+    renderSounds();
+  }
+
+  function toggleSoundSortDir() {
+    soundSort.dir = soundSort.dir === 'asc' ? 'desc' : 'asc';
+    _updateSoundSortBtn();
+    renderSounds();
+  }
+
+  function _updateSoundSortBtn() {
+    const btn = document.getElementById('soundSortDirBtn');
+    if (btn) btn.textContent = _SORT_DIR_LABELS[soundSort.field]?.[soundSort.dir] ?? soundSort.dir;
+  }
+
+  function resetSoundFilters() {
+    soundFilter = { star: 'all' };
+    soundSort   = { field: 'label', dir: 'asc' };
+    _trackingSearch = '';
+    const searchEl = document.getElementById('trackingSearch');
+    if (searchEl) searchEl.value = '';
+    const sel = document.getElementById('soundSortField');
+    if (sel) sel.value = 'label';
+    _updateSoundSortBtn();
+    const starIds = { all: 'sfStarAll', starred: 'sfStarStarred' };
+    Object.entries(starIds).forEach(([v, id]) => document.getElementById(id)?.classList.toggle('active', v === 'all'));
+    renderSounds();
+    _placeGlider(document.getElementById('sfStarAll').closest('.filter-pills'));
+  }
 
   function renderSounds() {
     const grid    = document.getElementById('soundsGrid');
     const countEl = document.getElementById('soundCount');
     const q = _trackingSearch.toLowerCase();
-    const filtered = q
-      ? sounds.filter(s => `${s.label || ''} ${s.sound_id}`.toLowerCase().includes(q))
-      : sounds;
-    countEl.textContent = q ? `${filtered.length} of ${sounds.length}` : sounds.length;
+    let filtered = sounds;
+    if (soundFilter.star === 'starred') filtered = filtered.filter(s => s.starred);
+    if (q) filtered = filtered.filter(s => `${s.label || ''} ${s.sound_id}`.toLowerCase().includes(q));
+    const isFiltered = soundFilter.star !== 'all' || !!_trackingSearch;
+    countEl.textContent = isFiltered ? `${filtered.length} of ${sounds.length}` : sounds.length;
+    const { field, dir } = soundSort;
+    filtered = [...filtered].sort((a, b) => {
+      let av = field === 'label' ? (a.label || a.sound_id) : (a[field] ?? (field === 'starred' ? 0 : 0));
+      let bv = field === 'label' ? (b.label || b.sound_id) : (b[field] ?? (field === 'starred' ? 0 : 0));
+      if (typeof av === 'string') av = av.toLowerCase();
+      if (typeof bv === 'string') bv = bv.toLowerCase();
+      if (av < bv) return dir === 'asc' ? -1 : 1;
+      if (av > bv) return dir === 'asc' ? 1 : -1;
+      return 0;
+    });
     const _tvPills = document.getElementById('tvUsers')?.closest('.filter-pills');
     if (_tvPills) _placeGlider(_tvPills);
     if (!sounds.length) {
@@ -3128,6 +3240,7 @@
           <div class="user-card-footer">
             <span class="user-checked">${checked}</span>
             <div style="display:flex;gap:6px;">
+              <button class="btn-star${s.starred ? ' starred' : ''}" onclick="event.stopPropagation();toggleSoundStar('${esc(s.sound_id)}')" title="${s.starred ? 'Unstar' : 'Star'}">${s.starred ? '★' : '☆'}</button>
               <button class="btn-run" ${runDis} onclick="event.stopPropagation();runSound('${esc(s.sound_id)}')">${runLabel}</button>
               <button class="btn-danger" onclick="event.stopPropagation();removeSound('${esc(s.sound_id)}','${esc(label)}')">Remove</button>
             </div>
@@ -3172,6 +3285,19 @@
     if (!ok) { alert(data.error || 'Failed to remove sound.'); return; }
     if (_soundModalId === soundId) closeSoundModal();
     loadSounds();
+  }
+
+  async function toggleSoundStar(soundId) {
+    const sound = sounds.find(s => s.sound_id === soundId);
+    if (!sound) return;
+    const newVal = !sound.starred;
+    sound.starred = newVal ? 1 : 0;
+    renderSounds();
+    await apiJSON(`/api/sounds/${encodeURIComponent(soundId)}/star`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ starred: newVal }),
+    });
   }
 
   async function runSound(soundId) {

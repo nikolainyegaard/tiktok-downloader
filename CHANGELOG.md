@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- Star button on user and sound cards: outline/grey when unset, solid yellow-orange when starred; persisted in the database
+- Starred filter pill for users (All / Starred) and sounds (All / Starred)
+- Starred sort option for users; sort controls for sounds (Label, Starred, Saved videos, Date added)
+
 ### Fixed
 - Private filter no longer matches banned users whose privacy_status was set before the ban
 - Reset button now clears the search field in addition to filters and sort
