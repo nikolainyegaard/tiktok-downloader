@@ -2303,7 +2303,7 @@
           row.innerHTML = `
             <span class="recent-date">${_recentDate(item.deleted_at)}</span>
             <span class="recent-name" ${item.enabled !== 0 ? '' : 'style="color:var(--text-dim)"'}>@${esc(item.username)}</span>
-            <span class="recent-detail">${esc(item.video_id.slice(0, 10))}\u2026</span>`;
+            <span class="recent-detail">${esc(item.video_id)}</span>`;
         } else if (_recentLogType === 'profile-changes') {
           const label = _FIELD_LABELS[item.field] || item.field;
           row.title = `Open @${item.username} · ${label} history`;
