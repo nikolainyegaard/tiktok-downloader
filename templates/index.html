@@ -2271,6 +2271,46 @@
     });
   }
 
+  // Toggle sort direction or switch field (returns new sort state).
+  function _doSort(state, field) {
+    return state.field === field
+      ? { field, dir: state.dir === 'asc' ? 'desc' : 'asc' }
+      : { field, dir: 'desc' };
+  }
+
+  // Shared IntersectionObserver sentinel for paginated modal lists.
+  // Appends a 1px div, observes it, fires callback once when it scrolls into
+  // view, then disconnects and removes the sentinel. Returns the observer so
+  // the caller can store it for early cleanup on modal close.
+  function _attachSentinel(listEl, callback) {
+    const s = document.createElement('div');
+    s.style.height = '1px';
+    listEl.appendChild(s);
+    const obs = new IntersectionObserver(entries => {
+      if (!entries[0].isIntersecting) return;
+      obs.disconnect();
+      s.remove();
+      callback();
+    }, { root: listEl, rootMargin: '300px' });
+    obs.observe(s);
+    return obs;
+  }
+
+  // Shared toolbar expand/collapse body. Returns the new expanded value so
+  // the caller can write it back to its own state variable.
+  function _doToggleToolbar(expanded, toolbarId, hasActiveFn) {
+    expanded = !expanded;
+    const toolbar = document.getElementById(toolbarId);
+    const wrap = toolbar?.querySelector('.toolbar-filter-wrap');
+    const btn  = toolbar?.querySelector('.toolbar-toggle');
+    if (wrap) {
+      wrap.classList.toggle('collapsed', !expanded);
+      if (expanded) wrap.querySelectorAll('.filter-pills').forEach(_placeGlider);
+    }
+    if (btn) btn.textContent = (expanded ? '▲' : '▼') + (hasActiveFn() ? ' Filters •' : ' Filters');
+    return expanded;
+  }
+
   function renderStats(s) {
     const grid = document.getElementById('statsGrid');
     if (!grid) return;
@@ -2733,36 +2773,38 @@
 
   // Utilities — clear avatars
 
-  async function triggerClearAvatars() {
-    const btn          = document.getElementById('util-clear-avatars-btn');
-    const status       = document.getElementById('util-clear-avatars-status');
-    const text         = document.getElementById('util-clear-avatars-text');
-    const includeBanned = document.getElementById('util-clear-avatars-include-banned').checked;
+  async function _runDeleteJob(btnId, statusId, textId, apiPath, bodyFn, resultFn) {
+    const btn    = document.getElementById(btnId);
+    const status = document.getElementById(statusId);
+    const text   = document.getElementById(textId);
     btn.disabled = true;
     status.style.display = '';
     text.textContent = 'Deleting…';
-    const { ok, data } = await apiJSON('/api/utils/clear-avatars', {
-      method: 'POST',
-      body: JSON.stringify({ include_banned: includeBanned }),
-    });
+    const opts = { method: 'POST' };
+    if (bodyFn) opts.body = JSON.stringify(bodyFn());
+    const { ok, data } = await apiJSON(apiPath, opts);
     btn.disabled = false;
     if (!ok) { text.textContent = data.error || 'Request failed.'; return; }
-    text.textContent = `Deleted ${data.deleted} avatar file${data.deleted !== 1 ? 's' : ''}.`;
+    text.textContent = resultFn(data);
   }
 
-  // Utilities — clear thumbnails
+  function triggerClearAvatars() {
+    const includeBanned = document.getElementById('util-clear-avatars-include-banned').checked;
+    return _runDeleteJob(
+      'util-clear-avatars-btn', 'util-clear-avatars-status', 'util-clear-avatars-text',
+      '/api/utils/clear-avatars',
+      () => ({ include_banned: includeBanned }),
+      d => `Deleted ${d.deleted} avatar file${d.deleted !== 1 ? 's' : ''}.`
+    );
+  }
 
-  async function triggerClearThumbnails() {
-    const btn    = document.getElementById('util-clear-thumbs-btn');
-    const status = document.getElementById('util-clear-thumbs-status');
-    const text   = document.getElementById('util-clear-thumbs-text');
-    btn.disabled = true;
-    status.style.display = '';
-    text.textContent = 'Deleting…';
-    const { ok, data } = await apiJSON('/api/utils/clear-thumbnails', { method: 'POST' });
-    btn.disabled = false;
-    if (!ok) { text.textContent = data.error || 'Request failed.'; return; }
-    text.textContent = `Deleted ${data.deleted} thumbnail file${data.deleted !== 1 ? 's' : ''}.`;
+  function triggerClearThumbnails() {
+    return _runDeleteJob(
+      'util-clear-thumbs-btn', 'util-clear-thumbs-status', 'util-clear-thumbs-text',
+      '/api/utils/clear-thumbnails',
+      null,
+      d => `Deleted ${d.deleted} thumbnail file${d.deleted !== 1 ? 's' : ''}.`
+    );
   }
 
   // ── Report view modal ─────────────────────────────────────────────────────────
@@ -3045,7 +3087,7 @@
   function setUserSortField(field) {
     userSort.field = field;
     userSort.dir   = (field === 'username' || field === 'display_name') ? 'asc' : 'desc';
-    _updateUserSortBtn();
+    _updateSortBtn('userSortDirBtn', userSort);
     renderUsers();
   }
 
@@ -3057,7 +3099,7 @@
     if (searchEl) searchEl.value = '';
     const sel = document.getElementById('userSortField');
     if (sel) sel.value = 'username';
-    _updateUserSortBtn();
+    _updateSortBtn('userSortDirBtn', userSort);
     Object.entries(USER_PRIV_IDS).forEach(([v, id]) => document.getElementById(id)?.classList.toggle('active', v === 'all'));
     Object.entries(USER_STAT_IDS).forEach(([v, id]) => document.getElementById(id)?.classList.toggle('active', v === 'all'));
     Object.entries(USER_STAR_IDS).forEach(([v, id]) => document.getElementById(id)?.classList.toggle('active', v === 'all'));
@@ -3069,13 +3111,13 @@
 
   function toggleUserSortDir() {
     userSort.dir = userSort.dir === 'asc' ? 'desc' : 'asc';
-    _updateUserSortBtn();
+    _updateSortBtn('userSortDirBtn', userSort);
     renderUsers();
   }
 
-  function _updateUserSortBtn() {
-    const btn = document.getElementById('userSortDirBtn');
-    if (btn) btn.textContent = _SORT_DIR_LABELS[userSort.field]?.[userSort.dir] ?? userSort.dir;
+  function _updateSortBtn(btnId, sortState) {
+    const btn = document.getElementById(btnId);
+    if (btn) btn.textContent = _SORT_DIR_LABELS[sortState.field]?.[sortState.dir] ?? sortState.dir;
   }
 
   function _filteredUsers() {
@@ -3419,20 +3461,16 @@
   function setSoundSortField(field) {
     soundSort.field = field;
     soundSort.dir   = (field === 'label') ? 'asc' : 'desc';
-    _updateSoundSortBtn();
+    _updateSortBtn('soundSortDirBtn', soundSort);
     renderSounds();
   }
 
   function toggleSoundSortDir() {
     soundSort.dir = soundSort.dir === 'asc' ? 'desc' : 'asc';
-    _updateSoundSortBtn();
+    _updateSortBtn('soundSortDirBtn', soundSort);
     renderSounds();
   }
 
-  function _updateSoundSortBtn() {
-    const btn = document.getElementById('soundSortDirBtn');
-    if (btn) btn.textContent = _SORT_DIR_LABELS[soundSort.field]?.[soundSort.dir] ?? soundSort.dir;
-  }
 
   function resetSoundFilters() {
     soundFilter = { star: 'all' };
@@ -3442,7 +3480,7 @@
     if (searchEl) searchEl.value = '';
     const sel = document.getElementById('soundSortField');
     if (sel) sel.value = 'label';
-    _updateSoundSortBtn();
+    _updateSortBtn('soundSortDirBtn', soundSort);
     Object.entries(SOUND_STAR_IDS).forEach(([v, id]) => document.getElementById(id)?.classList.toggle('active', v === 'all'));
     renderSounds();
     _placeGlider(document.getElementById('sfStarAll').closest('.filter-pills'));
@@ -3790,11 +3828,7 @@
   }
 
   function setSoundModalSort(field) {
-    if (_soundModalSort.field === field) {
-      _soundModalSort.dir = _soundModalSort.dir === 'asc' ? 'desc' : 'asc';
-    } else {
-      _soundModalSort = { field, dir: 'desc' };
-    }
+    _soundModalSort = _doSort(_soundModalSort, field);
     const list = document.getElementById('soundModalVideoList');
     const sx = list.scrollLeft;
     _renderSoundModalVideoList();
@@ -3851,15 +3885,10 @@
     list.insertAdjacentHTML('beforeend', html);
 
     if (_soundModalLoaded < vids.length) {
-      const sentinel = document.createElement('div');
-      sentinel.style.height = '1px';
-      list.appendChild(sentinel);
-      _soundModalObs = new IntersectionObserver(entries => {
-        if (!entries[0].isIntersecting) return;
-        _soundModalObs.disconnect(); _soundModalObs = null;
+      _soundModalObs = _attachSentinel(list, () => {
+        _soundModalObs = null;
         _appendSoundModalVideos(vids);
-      }, { root: list, rootMargin: '300px' });
-      _soundModalObs.observe(sentinel);
+      });
     }
   }
 
@@ -4068,25 +4097,15 @@
     renderSounds();
   }
 
-  async function triggerUserLoop() {
-    const btn = document.getElementById('triggerUserBtn');
+  async function _triggerLoop(btnId, apiPath, errMsg) {
+    const btn = document.getElementById(btnId);
     btn.disabled = true;
-    const { ok, data } = await apiJSON('/api/trigger', { method: 'POST' });
-    if (!ok) {
-      alert(data.error || 'Could not trigger user loop');
-      btn.disabled = false;
-    }
+    const { ok, data } = await apiJSON(apiPath, { method: 'POST' });
+    if (!ok) { alert(data.error || errMsg); btn.disabled = false; }
   }
 
-  async function triggerSoundLoop() {
-    const btn = document.getElementById('triggerSoundBtn');
-    btn.disabled = true;
-    const { ok, data } = await apiJSON('/api/trigger/sounds', { method: 'POST' });
-    if (!ok) {
-      alert(data.error || 'Could not trigger sound loop');
-      btn.disabled = false;
-    }
-  }
+  function triggerUserLoop()  { return _triggerLoop('triggerUserBtn',  '/api/trigger',        'Could not trigger user loop'); }
+  function triggerSoundLoop() { return _triggerLoop('triggerSoundBtn', '/api/trigger/sounds', 'Could not trigger sound loop'); }
 
   async function loadSettings() {
     const { ok, data } = await apiJSON('/api/settings');
@@ -4402,39 +4421,21 @@
   }
 
   function toggleModalToolbar() {
-    _modalToolbarExpanded = !_modalToolbarExpanded;
-    const toolbar = document.getElementById('modalToolbar');
-    const wrap = toolbar.querySelector('.toolbar-filter-wrap');
-    const btn  = toolbar.querySelector('.toolbar-toggle');
-    if (wrap) {
-      wrap.classList.toggle('collapsed', !_modalToolbarExpanded);
-      if (_modalToolbarExpanded) wrap.querySelectorAll('.filter-pills').forEach(_placeGlider);
-    }
-    if (btn) {
-      const hasActive = _modalFilter !== 'all' || _modalTypeFilter !== 'all';
-      btn.textContent = (_modalToolbarExpanded ? '▲' : '▼') + (hasActive ? ' Filters •' : ' Filters');
-    }
+    _modalToolbarExpanded = _doToggleToolbar(
+      _modalToolbarExpanded, 'modalToolbar',
+      () => _modalFilter !== 'all' || _modalTypeFilter !== 'all'
+    );
   }
 
   function toggleSoundModalToolbar() {
-    _soundModalToolbarExpanded = !_soundModalToolbarExpanded;
-    const toolbar = document.getElementById('soundModalToolbar');
-    const wrap = toolbar.querySelector('.toolbar-filter-wrap');
-    const btn  = toolbar.querySelector('.toolbar-toggle');
-    if (wrap) {
-      wrap.classList.toggle('collapsed', !_soundModalToolbarExpanded);
-      if (_soundModalToolbarExpanded) wrap.querySelectorAll('.filter-pills').forEach(_placeGlider);
-    }
-    if (btn) {
-      const hasActive = _soundModalFilter !== 'all' || _soundModalTypeFilter !== 'all';
-      btn.textContent = (_soundModalToolbarExpanded ? '▲' : '▼') + (hasActive ? ' Filters •' : ' Filters');
-    }
+    _soundModalToolbarExpanded = _doToggleToolbar(
+      _soundModalToolbarExpanded, 'soundModalToolbar',
+      () => _soundModalFilter !== 'all' || _soundModalTypeFilter !== 'all'
+    );
   }
 
   function setModalSort(field) {
-    _modalSort = _modalSort.field === field
-      ? { field, dir: _modalSort.dir === 'asc' ? 'desc' : 'asc' }
-      : { field, dir: 'desc' };
+    _modalSort = _doSort(_modalSort, field);
     const list = document.getElementById('modalVideoList');
     const sx = list.scrollLeft;
     _renderModalVideoList();
@@ -4894,16 +4895,10 @@
       grid.appendChild(cell);
     });
     if (_modalLoaded < vids.length) {
-      const sentinel = document.createElement('div');
-      sentinel.style.height = '1px';
-      list.appendChild(sentinel);
-      _modalObs = new IntersectionObserver(entries => {
-        if (!entries[0].isIntersecting) return;
-        _modalObs.disconnect(); _modalObs = null;
-        sentinel.remove();
+      _modalObs = _attachSentinel(list, () => {
+        _modalObs = null;
         _appendModalGrid(vids);
-      }, { root: list, rootMargin: '300px' });
-      _modalObs.observe(sentinel);
+      });
     }
   }
 
@@ -4947,15 +4942,10 @@
     list.insertAdjacentHTML('beforeend', html);
 
     if (_modalLoaded < vids.length) {
-      const sentinel = document.createElement('div');
-      sentinel.style.height = '1px';
-      list.appendChild(sentinel);
-      _modalObs = new IntersectionObserver(entries => {
-        if (!entries[0].isIntersecting) return;
-        _modalObs.disconnect(); _modalObs = null;
+      _modalObs = _attachSentinel(list, () => {
+        _modalObs = null;
         _appendModalVideos(vids);
-      }, { root: list, rootMargin: '300px' });
-      _modalObs.observe(sentinel);
+      });
     }
   }
 
