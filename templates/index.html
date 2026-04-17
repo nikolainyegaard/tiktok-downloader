@@ -9,20 +9,42 @@
   <title>TikTok Downloader</title>
   <style>
     :root {
-      --bg:        #111214;
-      --surface:   #1c1e21;
-      --surface2:  #252830;
-      --border:    #2e3138;
-      --accent:    #4f8ef7;
-      --accent-h:  #3a78e8;
-      --red:       #e05252;
-      --green:     #4caf7d;
-      --yellow:    #e0a83a;
-      --muted:     #6b717f;
-      --text:      #dde1ea;
-      --text-dim:  #9499a5;
-      --radius:    8px;
-      --mono:      "SF Mono", "Fira Code", "Cascadia Code", monospace;
+      /* Base palette */
+      --bg:           #111214;
+      --surface:      #1c1e21;
+      --surface1:     #1c1e21;   /* alias; some components use surface1 */
+      --surface2:     #252830;
+      --bg-hover:     #252830;   /* hover states and overlay buttons */
+      --bg-card:      #252830;   /* code / textarea inset backgrounds */
+      --border:       #2e3138;
+      --accent:       #4f8ef7;
+      --accent-h:     #3a78e8;
+      --red:          #e05252;
+      --green:        #4caf7d;
+      --yellow:       #e0a83a;
+      --muted:        #6b717f;
+      --text:         #dde1ea;
+      --text-dim:     #9499a5;
+
+      /* Alpha tints — semantic colour at common opacities */
+      --accent-bg:    rgba(79,142,247,.15);
+      --accent-bg-h:  rgba(79,142,247,.28);
+      --red-bg:       rgba(224,82,82,.15);
+      --red-bg-h:     rgba(224,82,82,.12);
+      --green-bg:     rgba(76,175,125,.15);
+      --yellow-bg:    rgba(224,168,58,.15);
+      --yellow-bg-h:  rgba(224,168,58,.28);
+
+      /* Geometry */
+      --radius:       8px;
+      --radius-lg:    12px;
+      --radius-pill:  99px;
+
+      /* Elevation */
+      --shadow-modal: 0 24px 64px rgba(0,0,0,.5);
+
+      /* Typography */
+      --mono:         "SF Mono", "Fira Code", "Cascadia Code", monospace;
     }
 
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -64,7 +86,7 @@
       align-items: center;
       gap: 6px;
       padding: 4px 10px;
-      border-radius: 99px;
+      border-radius: var(--radius-pill);
       font-size: 12px;
       font-weight: 600;
       background: var(--surface2);
@@ -103,7 +125,7 @@
     .btn-primary:hover:not(:disabled) { background: var(--accent-h); }
 
     .btn-danger { background: transparent; color: var(--red); border: 1px solid var(--red); padding: 5px 10px; font-size: 12px; }
-    .btn-danger:hover:not(:disabled) { background: rgba(224,82,82,.12); }
+    .btn-danger:hover:not(:disabled) { background: var(--red-bg-h); }
 
     .btn-run { background: transparent; color: var(--accent); border: 1px solid var(--accent); padding: 5px 10px; font-size: 12px; }
     .btn-run:hover:not(:disabled) { background: rgba(79,142,247,.12); }
@@ -133,31 +155,31 @@
       align-items: center;
       gap: 7px;
       padding: 5px 12px;
-      border-radius: 99px;
+      border-radius: var(--radius-pill);
       font-size: 12px;
       font-weight: 600;
       white-space: nowrap;
     }
-    .cookie-pill.present { background: rgba(76,175,125,.15); color: var(--green); }
-    .cookie-pill.absent  { background: rgba(224,82,82,.15);  color: var(--red); }
+    .cookie-pill.present { background: var(--green-bg); color: var(--green); }
+    .cookie-pill.absent  { background: var(--red-bg);  color: var(--red); }
     .cookie-pill .dot    { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
 
     .backfill-pill {
       display: inline-flex; align-items: center; gap: 5px;
       font-size: 11px; font-weight: 600;
-      padding: 3px 9px; border-radius: 99px;
+      padding: 3px 9px; border-radius: var(--radius-pill);
       cursor: pointer; white-space: nowrap;
-      background: rgba(224,168,58,.15); color: var(--yellow);
+      background: var(--yellow-bg); color: var(--yellow);
       transition: background .1s;
     }
-    .backfill-pill:hover { background: rgba(224,168,58,.28); }
+    .backfill-pill:hover { background: var(--yellow-bg-h); }
 
     .cookie-meta { font-size: 12px; color: var(--text-dim); }
 
     /* ── Sounds panel ────────────────────────────────────────────────────────── */
     .sound-icon-wrap {
       width: 48px; height: 48px; border-radius: 50%; flex-shrink: 0;
-      background: rgba(79,142,247,.15);
+      background: var(--accent-bg);
       display: flex; align-items: center; justify-content: center;
     }
     .sound-icon-letter { font-size: 22px; color: var(--accent); pointer-events: none; user-select: none; }
@@ -261,7 +283,7 @@
       background: none; border: none; color: var(--red); cursor: pointer;
       font-size: 15px; padding: 0 4px; opacity: 0.7; border-radius: 4px; line-height: 1;
     }
-    .pending-item.error button:hover { opacity: 1; background: rgba(224,82,82,.12); }
+    .pending-item.error button:hover { opacity: 1; background: var(--red-bg-h); }
     @keyframes spin { to { transform: rotate(360deg); } }
     .spinner {
       width: 11px; height: 11px; flex-shrink: 0;
@@ -331,16 +353,16 @@
     .stat-item-label { font-size: 11px; color: var(--muted); }
     .stat-item-value { font-size: 13px; font-weight: 700; color: var(--text); }
 
-    .account-status { display: inline-block; font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 99px; white-space: nowrap; }
-    .account-status.active   { background: rgba(76,175,125,.15); color: var(--green); }
+    .account-status { display: inline-block; font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: var(--radius-pill); white-space: nowrap; }
+    .account-status.active   { background: var(--green-bg); color: var(--green); }
     .account-status.inactive { background: var(--surface2);      color: var(--muted); }
     .account-status.unknown  { background: var(--surface2);      color: var(--muted); }
 
-    .privacy-status { display: inline-block; font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 99px; white-space: nowrap; }
-    .privacy-status.public             { background: rgba(76,175,125,.15); color: var(--green); }
-    .privacy-status.private-accessible { background: rgba(224,168,58,.15); color: var(--yellow); }
-    .privacy-status.private-blocked    { background: rgba(224,82,82,.15);  color: var(--red); }
-    .privacy-status.banned             { background: rgba(224,82,82,.15);  color: var(--red); }
+    .privacy-status { display: inline-block; font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: var(--radius-pill); white-space: nowrap; }
+    .privacy-status.public             { background: var(--green-bg); color: var(--green); }
+    .privacy-status.private-accessible { background: var(--yellow-bg); color: var(--yellow); }
+    .privacy-status.private-blocked    { background: var(--red-bg);  color: var(--red); }
+    .privacy-status.banned             { background: var(--red-bg);  color: var(--red); }
 
     /* Inactive card — dim content, leave footer/pills/buttons unchanged */
     .user-card-inactive .user-card-top,
@@ -354,7 +376,7 @@
     /* Tracking toggle switch */
     .tracking-toggle { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; user-select: none; vertical-align: middle; }
     .tracking-toggle input { display: none; }
-    .toggle-track { width: 30px; height: 17px; background: var(--border); border-radius: 99px; position: relative; transition: background 0.2s; flex-shrink: 0; }
+    .toggle-track { width: 30px; height: 17px; background: var(--border); border-radius: var(--radius-pill); position: relative; transition: background 0.2s; flex-shrink: 0; }
     .tracking-toggle input:checked + .toggle-track { background: var(--accent); }
     .toggle-thumb { position: absolute; top: 2px; left: 2px; width: 13px; height: 13px; background: #fff; border-radius: 50%; transition: left 0.2s; }
     .tracking-toggle input:checked + .toggle-track .toggle-thumb { left: 15px; }
@@ -419,12 +441,12 @@
       height: 84vh;
       background: var(--surface);
       border: 1px solid var(--border);
-      border-radius: 12px;
+      border-radius: var(--radius-lg);
       display: flex;
       flex-direction: column;
       overflow: hidden;
       position: relative;
-      box-shadow: 0 24px 64px rgba(0,0,0,.5);
+      box-shadow: var(--shadow-modal);
     }
 
     .modal-close,
@@ -586,7 +608,7 @@
       background: var(--bg);
     }
 
-    .filter-pills { display: flex; gap: 4px; position: relative; background: var(--surface2); border: 1px solid var(--border); box-shadow: 0 1px 4px rgba(0,0,0,.25); padding: 4px; border-radius: 99px; }
+    .filter-pills { display: flex; gap: 4px; position: relative; background: var(--surface2); border: 1px solid var(--border); box-shadow: 0 1px 4px rgba(0,0,0,.25); padding: 4px; border-radius: var(--radius-pill); }
     .filter-pill {
       display: inline-flex; align-items: center; justify-content: center;
       background: var(--surface2);
@@ -594,7 +616,7 @@
       color: var(--text-dim);
       font-size: 11px; font-weight: 600;
       height: 24px; padding: 0 10px;
-      border-radius: 99px;
+      border-radius: var(--radius-pill);
       cursor: pointer;
       white-space: nowrap;
       transition: background .1s, color .1s, border-color .1s;
@@ -606,7 +628,7 @@
     .filter-pills .filter-pill { background: transparent; border-color: transparent; }
     .filter-pills .filter-pill.active { background: transparent; border-color: transparent; color: #fff; }
     .filter-pills .filter-pill:hover:not(.active) { background: rgba(255,255,255,.06); border-color: transparent; color: var(--text); }
-    .glider { position: absolute; z-index: 1; background: var(--accent); border-radius: 99px; transition: left .2s ease, width .2s ease; pointer-events: none; }
+    .glider { position: absolute; z-index: 1; background: var(--accent); border-radius: var(--radius-pill); transition: left .2s ease, width .2s ease; pointer-events: none; }
 
     .modal-vid-count { margin-left: auto; font-size: 12px; color: var(--muted); white-space: nowrap; }
     .toolbar-main-row  { display: flex; align-items: center; gap: 10px; flex: 1; min-width: 0; }
@@ -664,13 +686,13 @@
     .author-chip {
       display: inline-block; max-width: 100%;
       font-size: 11px; font-weight: 600;
-      padding: 2px 7px; border-radius: 99px;
-      background: rgba(79,142,247,.15); color: var(--accent);
+      padding: 2px 7px; border-radius: var(--radius-pill);
+      background: var(--accent-bg); color: var(--accent);
       overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
       cursor: pointer; text-decoration: none;
       transition: background .1s;
     }
-    .author-chip:hover { background: rgba(79,142,247,.28); }
+    .author-chip:hover { background: var(--accent-bg-h); }
     .author-chip.untracked { background: var(--surface2); color: var(--muted); cursor: default; }
 
     .modal-video-list { flex: 1; overflow-y: auto; }
@@ -719,11 +741,11 @@
     .vstatus {
       display: inline-flex; align-items: center;
       font-size: 10px; font-weight: 700;
-      padding: 2px 7px; border-radius: 99px; white-space: nowrap;
+      padding: 2px 7px; border-radius: var(--radius-pill); white-space: nowrap;
     }
-    .vstatus.up        { background: rgba(76,175,125,.15);  color: var(--green); }
-    .vstatus.deleted   { background: rgba(224,82,82,.15);   color: var(--red); }
-    .vstatus.undeleted { background: rgba(224,168,58,.15);  color: var(--yellow); }
+    .vstatus.up        { background: var(--green-bg);  color: var(--green); }
+    .vstatus.deleted   { background: var(--red-bg);   color: var(--red); }
+    .vstatus.undeleted { background: var(--yellow-bg);  color: var(--yellow); }
     .vstatus.missing   { background: rgba(255,152,0,.15);   color: #ff9800; }
 
     .vlist-empty   { padding: 48px; text-align: center; color: var(--muted); }
@@ -1004,12 +1026,12 @@
       height: 72vh;
       background: var(--surface);
       border: 1px solid var(--border);
-      border-radius: 12px;
+      border-radius: var(--radius-lg);
       display: flex;
       flex-direction: column;
       overflow: hidden;
       position: relative;
-      box-shadow: 0 24px 64px rgba(0,0,0,.5);
+      box-shadow: var(--shadow-modal);
     }
     .report-view-hdr {
       padding: 14px 44px 10px 18px;
@@ -1030,7 +1052,7 @@
       overflow-y: auto;
       padding: 10px 14px;
       margin: 0;
-      font-family: monospace;
+      font-family: var(--mono);
       font-size: 11px;
       line-height: 1.6;
       color: var(--text);
@@ -1044,7 +1066,7 @@
       border-top: 1px solid var(--border);
     }
     .report-preview {
-      font-family: monospace;
+      font-family: var(--mono);
       font-size: 11px;
       color: var(--muted);
       line-height: 1.6;
@@ -1074,12 +1096,12 @@
       height: 70vh;
       background: var(--surface);
       border: 1px solid var(--border);
-      border-radius: 12px;
+      border-radius: var(--radius-lg);
       display: flex;
       flex-direction: column;
       overflow: hidden;
       position: relative;
-      box-shadow: 0 24px 64px rgba(0,0,0,.5);
+      box-shadow: var(--shadow-modal);
     }
     .recent-log-modal-hdr {
       padding: 14px 44px 12px 18px;
@@ -1130,9 +1152,9 @@
       height: 540px; max-height: 90vh;
       background: var(--surface);
       border: 1px solid var(--border);
-      border-radius: 12px;
+      border-radius: var(--radius-lg);
       display: flex; overflow: hidden; position: relative;
-      box-shadow: 0 24px 64px rgba(0,0,0,.5);
+      box-shadow: var(--shadow-modal);
     }
 
     .settings-nav {
@@ -2095,10 +2117,8 @@
   // ── Helpers ───────────────────────────────────────────────────────────────────
 
   async function apiJSON(path, opts = {}) {
-    const r = await fetch(path, {
-      headers: { 'Content-Type': 'application/json' },
-      ...opts,
-    });
+    const headers = opts.body ? { 'Content-Type': 'application/json', ...opts.headers } : { ...opts.headers };
+    const r = await fetch(path, { ...opts, headers });
     return { ok: r.ok, status: r.status, data: await r.json().catch(() => ({})) };
   }
 
@@ -5077,7 +5097,7 @@
       // First click — enter confirm state
       _resetBackfillConfirming = true;
       btn.textContent = 'Click again to confirm';
-      btn.style.background = 'rgba(224,82,82,.15)';
+      btn.style.background = 'var(--red-bg)';
       statusEl.textContent = 'This will queue all videos for re-backfill.';
       statusEl.style.color = 'var(--red)';
       // Auto-cancel after 5 s
