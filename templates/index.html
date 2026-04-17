@@ -2196,11 +2196,79 @@
 
   // ── Statistics panel ─────────────────────────────────────────────────────────
 
+  function _fmtSuffix(n, div, sfx) { return (n / div).toFixed(1).replace(/\.0$/, '') + sfx; }
+
   function _fmtLarge(n) {
-    if (n >= 1_000_000_000) return (n / 1_000_000_000).toFixed(1).replace(/\.0$/, '') + 'B';
-    if (n >= 1_000_000)     return (n / 1_000_000).toFixed(1).replace(/\.0$/, '') + 'M';
-    if (n >= 1_000)         return (n / 1_000).toFixed(1).replace(/\.0$/, '') + 'K';
+    if (n >= 1_000_000_000) return _fmtSuffix(n, 1_000_000_000, 'B');
+    if (n >= 1_000_000)     return _fmtSuffix(n, 1_000_000, 'M');
+    if (n >= 1_000)         return _fmtSuffix(n, 1_000, 'K');
     return n.toLocaleString();
+  }
+
+  function fmtCount(n) {
+    if (n == null) return '—';
+    if (n >= 1_000_000) return _fmtSuffix(n, 1_000_000, 'M');
+    if (n >= 1_000)     return _fmtSuffix(n, 1_000, 'K');
+    return String(n);
+  }
+
+  // ── Shared render helpers ─────────────────────────────────────────────────────
+
+  const PRIVACY_MAP = {
+    'public':             ['public',             'Public'],
+    'private_accessible': ['private-accessible', 'Private'],
+    'private_blocked':    ['private-blocked',    'Private'],
+  };
+
+  const USER_PRIV_IDS  = { all: 'ufPrivAll', public: 'ufPrivPublic', private: 'ufPrivPrivate', banned: 'ufPrivBanned' };
+  const USER_STAT_IDS  = { all: 'ufStatAll', active: 'ufStatActive', inactive: 'ufStatInactive' };
+  const USER_STAR_IDS  = { all: 'ufStarAll', starred: 'ufStarStarred' };
+  const SOUND_STAR_IDS = { all: 'sfStarAll', starred: 'sfStarStarred' };
+
+  function _videoStatus(v) {
+    const isMissing = v.status === 'up' && v.pending_deletion_count > 0;
+    const cls   = v.status === 'deleted'   ? 'deleted'
+                : v.status === 'undeleted' ? 'undeleted'
+                : isMissing                ? 'missing'
+                :                           'up';
+    const label = v.status === 'deleted'   ? 'Deleted'
+                : v.status === 'undeleted' ? 'Restored'
+                : isMissing                ? 'Missing'
+                :                           'Active';
+    return { cls, label };
+  }
+
+  function _trackingBadge(tracking_enabled) {
+    return tracking_enabled === 0
+      ? { cls: 'inactive', label: 'Inactive' }
+      : { cls: 'active',   label: 'Active' };
+  }
+
+  function _fmtLastChecked(ts) {
+    return ts
+      ? `Last checked ${fmt.rel(new Date(ts * 1000).toISOString())}`
+      : 'Never checked';
+  }
+
+  function _pill(key, label, activeKey, onclickFn, counts) {
+    const active = activeKey === key ? ' active' : '';
+    const n      = counts[key];
+    return `<button class="filter-pill${active}" data-filter-key="${key}" onclick="${onclickFn}('${key}')">`
+         + `${label}${n ? ` <span style="opacity:.65">(${n})</span>` : ''}</button>`;
+  }
+
+  function _typePill(key, label, activeKey, onclickFn) {
+    const active = activeKey === key ? ' active' : '';
+    return `<button class="filter-pill${active}" data-type-key="${key}" onclick="${onclickFn}('${key}')">${label}</button>`;
+  }
+
+  function _sortByField(arr, field, dir) {
+    return [...arr].sort((a, b) => {
+      const av = a[field] ?? (dir === 'asc' ? Infinity : -Infinity);
+      const bv = b[field] ?? (dir === 'asc' ? Infinity : -Infinity);
+      return dir === 'asc' ? (av < bv ? -1 : av > bv ? 1 : 0)
+                           : (av > bv ? -1 : av < bv ? 1 : 0);
+    });
   }
 
   function renderStats(s) {
@@ -2965,10 +3033,7 @@
 
   function setUserFilter(group, value) {
     userFilter[group] = value;
-    const privIds = { all: 'ufPrivAll', public: 'ufPrivPublic', private: 'ufPrivPrivate', banned: 'ufPrivBanned' };
-    const statIds = { all: 'ufStatAll', active: 'ufStatActive', inactive: 'ufStatInactive' };
-    const starIds = { all: 'ufStarAll', starred: 'ufStarStarred' };
-    const map     = group === 'priv' ? privIds : group === 'stat' ? statIds : starIds;
+    const map = group === 'priv' ? USER_PRIV_IDS : group === 'stat' ? USER_STAT_IDS : USER_STAR_IDS;
     Object.entries(map).forEach(([v, id]) => {
       document.getElementById(id)?.classList.toggle('active', v === value);
     });
@@ -2993,12 +3058,9 @@
     const sel = document.getElementById('userSortField');
     if (sel) sel.value = 'username';
     _updateUserSortBtn();
-    const privIds = { all: 'ufPrivAll', public: 'ufPrivPublic', private: 'ufPrivPrivate', banned: 'ufPrivBanned' };
-    const statIds = { all: 'ufStatAll', active: 'ufStatActive', inactive: 'ufStatInactive' };
-    const starIds = { all: 'ufStarAll', starred: 'ufStarStarred' };
-    Object.entries(privIds).forEach(([v, id]) => document.getElementById(id)?.classList.toggle('active', v === 'all'));
-    Object.entries(statIds).forEach(([v, id]) => document.getElementById(id)?.classList.toggle('active', v === 'all'));
-    Object.entries(starIds).forEach(([v, id]) => document.getElementById(id)?.classList.toggle('active', v === 'all'));
+    Object.entries(USER_PRIV_IDS).forEach(([v, id]) => document.getElementById(id)?.classList.toggle('active', v === 'all'));
+    Object.entries(USER_STAT_IDS).forEach(([v, id]) => document.getElementById(id)?.classList.toggle('active', v === 'all'));
+    Object.entries(USER_STAR_IDS).forEach(([v, id]) => document.getElementById(id)?.classList.toggle('active', v === 'all'));
     renderUsers();
     _placeGlider(document.getElementById('ufPrivAll').closest('.filter-pills'));
     _placeGlider(document.getElementById('ufStatAll').closest('.filter-pills'));
@@ -3075,24 +3137,13 @@
       const isInactive = u.tracking_enabled === 0;
       const isBanned   = u.account_status === 'banned';
 
-      // Tracking pill (was account-status active/banned)
-      const trackingCls   = isInactive ? 'inactive' : 'active';
-      const trackingLabel = isInactive ? 'Inactive' : 'Active';
-
-      // Account pill: banned moves here from the old status pill
-      const accountPillMap = {
-        'public':             ['public',             'Public'],
-        'private_accessible': ['private-accessible', 'Private'],
-        'private_blocked':    ['private-blocked',    'Private'],
-      };
+      const { cls: trackingCls, label: trackingLabel } = _trackingBadge(u.tracking_enabled);
       const accountBadge = u.account_status === 'banned'
         ? `<span class="privacy-status banned">Banned</span>`
-        : (accountPillMap[u.privacy_status]
-            ? `<span class="privacy-status ${accountPillMap[u.privacy_status][0]}">${accountPillMap[u.privacy_status][1]}</span>`
+        : (PRIVACY_MAP[u.privacy_status]
+            ? `<span class="privacy-status ${PRIVACY_MAP[u.privacy_status][0]}">${PRIVACY_MAP[u.privacy_status][1]}</span>`
             : '');
-      const checked   = u.last_checked
-        ? `Last checked ${fmt.rel(new Date(u.last_checked * 1000).toISOString())}`
-        : 'Never checked';
+      const checked = _fmtLastChecked(u.last_checked);
 
       const oldNames   = (u.old_usernames || []).map(n => `@${esc(n)}`).join(' · ');
       const oldNameTag = oldNames ? ` <span class="user-old-names">· ${oldNames}</span>` : '';
@@ -3358,9 +3409,7 @@
 
   function setSoundFilter(group, value) {
     soundFilter[group] = value;
-    const starIds = { all: 'sfStarAll', starred: 'sfStarStarred' };
-    const map     = starIds;
-    Object.entries(map).forEach(([v, id]) => {
+    Object.entries(SOUND_STAR_IDS).forEach(([v, id]) => {
       document.getElementById(id)?.classList.toggle('active', v === value);
     });
     renderSounds();
@@ -3394,8 +3443,7 @@
     const sel = document.getElementById('soundSortField');
     if (sel) sel.value = 'label';
     _updateSoundSortBtn();
-    const starIds = { all: 'sfStarAll', starred: 'sfStarStarred' };
-    Object.entries(starIds).forEach(([v, id]) => document.getElementById(id)?.classList.toggle('active', v === 'all'));
+    Object.entries(SOUND_STAR_IDS).forEach(([v, id]) => document.getElementById(id)?.classList.toggle('active', v === 'all'));
     renderSounds();
     _placeGlider(document.getElementById('sfStarAll').closest('.filter-pills'));
   }
@@ -3432,15 +3480,12 @@
     grid.innerHTML = filtered.map(s => {
       const label      = s.label || s.sound_id;
       const ttUrl      = `https://www.tiktok.com/music/-${s.sound_id}`;
-      const checked    = s.last_checked
-        ? `Last checked ${fmt.rel(new Date(s.last_checked * 1000).toISOString())}`
-        : 'Never checked';
+      const checked    = _fmtLastChecked(s.last_checked);
       const inQueue      = soundRunQueue.includes(s.sound_id);
       const isCurrent    = soundRunCurrent === s.sound_id;
       const runLabel     = isCurrent ? 'Running…' : inQueue ? 'Queued' : 'Run';
       const runDis       = (inQueue || isCurrent) ? 'disabled' : '';
-      const sTrackingCls   = s.tracking_enabled === 0 ? 'inactive' : 'active';
-      const sTrackingLabel = s.tracking_enabled === 0 ? 'Inactive' : 'Active';
+      const { cls: sTrackingCls, label: sTrackingLabel } = _trackingBadge(s.tracking_enabled);
       return `
         <div class="user-card" data-soundid="${esc(s.sound_id)}" onclick="if(!event.target.closest('button,a'))openSoundModal('${esc(s.sound_id)}')" role="button" tabindex="0">
           <div class="user-card-top">
@@ -3592,12 +3637,9 @@
   function _renderSoundModalHeader(s) {
     const label  = s.label || s.sound_id;
     const ttUrl  = `https://www.tiktok.com/music/-${esc(s.sound_id)}`;
-    const checked = s.last_checked
-      ? 'Last checked ' + fmt.rel(new Date(s.last_checked * 1000).toISOString())
-      : 'Never checked';
-    const sSoundInactive    = s.tracking_enabled === 0;
-    const sSoundTrackingCls = sSoundInactive ? 'inactive' : 'active';
-    const sSoundTrackingLbl = sSoundInactive ? 'Inactive' : 'Active';
+    const checked = _fmtLastChecked(s.last_checked);
+    const { cls: sSoundTrackingCls, label: sSoundTrackingLbl } = _trackingBadge(s.tracking_enabled);
+    const sSoundInactive = s.tracking_enabled === 0;
     document.getElementById('soundModalHeader').innerHTML = `
       <div class="modal-avatar-wrap">
         <div class="sound-icon-wrap" style="width:56px;height:56px">
@@ -3638,12 +3680,7 @@
     if (_soundModalTypeFilter === 'video') vids = vids.filter(v => v.type === 'video');
     if (_soundModalTypeFilter === 'photo') vids = vids.filter(v => v.type === 'photo');
     const { field, dir } = _soundModalSort;
-    return [...vids].sort((a, b) => {
-      const av = a[field] ?? (dir === 'asc' ? Infinity : -Infinity);
-      const bv = b[field] ?? (dir === 'asc' ? Infinity : -Infinity);
-      return dir === 'asc' ? (av < bv ? -1 : av > bv ? 1 : 0)
-                           : (av > bv ? -1 : av < bv ? 1 : 0);
-    });
+    return _sortByField(vids, field, dir);
   }
 
   function _renderSoundModalToolbar(vids) {
@@ -3659,16 +3696,8 @@
     });
     const hasMultipleTypes = typeCounts.video > 0 && typeCounts.photo > 0;
 
-    const pill = (key, label) => {
-      const active = _soundModalFilter === key ? ' active' : '';
-      const n      = counts[key];
-      return `<button class="filter-pill${active}" data-filter-key="${key}" onclick="setSoundModalFilter('${key}')">`
-           + `${label}${n ? ` <span style="opacity:.65">(${n})</span>` : ''}</button>`;
-    };
-    const typePill = (key, label) => {
-      const active = _soundModalTypeFilter === key ? ' active' : '';
-      return `<button class="filter-pill${active}" data-type-key="${key}" onclick="setSoundModalTypeFilter('${key}')">${label}</button>`;
-    };
+    const pill     = (key, label) => _pill(key, label, _soundModalFilter, 'setSoundModalFilter', counts);
+    const typePill = (key, label) => _typePill(key, label, _soundModalTypeFilter, 'setSoundModalTypeFilter');
 
     const shown  = _soundFilteredSorted().length;
     const label  = shown === 1 ? '1 post' : `${shown.toLocaleString()} posts`;
@@ -3793,15 +3822,7 @@
     _soundModalLoaded += batch.length;
 
     const html = batch.map(v => {
-      const isMissing_s = v.status === 'up' && v.pending_deletion_count > 0;
-      const statusLabel = v.status === 'deleted'   ? 'Deleted'
-                        : v.status === 'undeleted' ? 'Restored'
-                        : isMissing_s              ? 'Missing'
-                        :                           'Active';
-      const statusCls_s = v.status === 'deleted'   ? 'deleted'
-                        : v.status === 'undeleted' ? 'undeleted'
-                        : isMissing_s              ? 'missing'
-                        :                           'up';
+      const { cls: statusCls_s, label: statusLabel } = _videoStatus(v);
       const authorName  = v.author_username || v.tiktok_id || '?';
       const authorChip  = v.author_enabled === 1
         ? `<span class="author-chip" onclick="event.stopPropagation();closeSoundModal();openUserModal('${esc(v.tiktok_id)}')">@${esc(authorName)}</span>`
@@ -4152,13 +4173,6 @@
     { field: null,             label: '' },
   ];
 
-  function fmtCount(n) {
-    if (n == null) return '—';
-    if (n >= 1_000_000) return (n / 1_000_000).toFixed(1).replace(/\.0$/, '') + 'M';
-    if (n >= 1_000)     return (n / 1_000).toFixed(1).replace(/\.0$/, '') + 'K';
-    return String(n);
-  }
-
   const _dtFmt          = new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'short', year: 'numeric',
                                                              hour: '2-digit', minute: '2-digit' });
   const _dtFmtTime      = new Intl.DateTimeFormat('en-GB', { hour: '2-digit', minute: '2-digit' });
@@ -4378,12 +4392,7 @@
       );
     }
     const { field, dir } = _modalSort;
-    return [...vids].sort((a, b) => {
-      const av = a[field] ?? (dir === 'asc' ? Infinity : -Infinity);
-      const bv = b[field] ?? (dir === 'asc' ? Infinity : -Infinity);
-      return dir === 'asc' ? (av < bv ? -1 : av > bv ? 1 : 0)
-                           : (av > bv ? -1 : av < bv ? 1 : 0);
-    });
+    return _sortByField(vids, field, dir);
   }
 
   function onModalSearch(val) {
@@ -4477,21 +4486,11 @@
   function _renderModalHeader(u) {
     const oldNames = (u.old_usernames || []).map(n => `@${esc(n)}`).join(' · ');
 
-    // Tracking pill
-    const isInactive   = u.tracking_enabled === 0;
-    const trackingCls  = isInactive ? 'inactive' : 'active';
-    const trackingLbl  = isInactive ? 'Inactive' : 'Active';
-
-    // Account pill: banned absorbs into privacy slot
-    const privacyMap = {
-      'public':             ['public',             'Public'],
-      'private_accessible': ['private-accessible', 'Private'],
-      'private_blocked':    ['private-blocked',    'Private'],
-    };
+    const { cls: trackingCls, label: trackingLbl } = _trackingBadge(u.tracking_enabled);
     const accountBadge = u.account_status === 'banned'
       ? `<span class="privacy-status banned">Banned</span>`
-      : (privacyMap[u.privacy_status]
-          ? `<span class="privacy-status ${privacyMap[u.privacy_status][0]}">${privacyMap[u.privacy_status][1]}</span>`
+      : (PRIVACY_MAP[u.privacy_status]
+          ? `<span class="privacy-status ${PRIVACY_MAP[u.privacy_status][0]}">${PRIVACY_MAP[u.privacy_status][1]}</span>`
           : '');
 
     const joinStr = u.join_date
@@ -4568,16 +4567,8 @@
     });
     const hasMultipleTypes = typeCounts.video > 0 && typeCounts.photo > 0;
 
-    const pill = (key, label) => {
-      const active = _modalFilter === key ? ' active' : '';
-      const n      = counts[key];
-      return `<button class="filter-pill${active}" data-filter-key="${key}" onclick="setModalFilter('${key}')">`
-           + `${label}${n ? ` <span style="opacity:.65">(${n})</span>` : ''}</button>`;
-    };
-    const typePill = (key, label) => {
-      const active = _modalTypeFilter === key ? ' active' : '';
-      return `<button class="filter-pill${active}" data-type-key="${key}" onclick="setModalTypeFilter('${key}')">${label}</button>`;
-    };
+    const pill     = (key, label) => _pill(key, label, _modalFilter, 'setModalFilter', counts);
+    const typePill = (key, label) => _typePill(key, label, _modalTypeFilter, 'setModalTypeFilter');
 
     const allPosts   = _filteredSorted(true);
     const shownPosts = _filteredSorted();
@@ -4887,12 +4878,8 @@
     _modalLoaded += batch.length;
     batch.forEach(v => {
       const cell = document.createElement('div');
-      const isMissing = v.status === 'up' && v.pending_deletion_count > 0;
-      const statusCls = v.status === 'deleted'   ? ' deleted'
-                      : v.status === 'undeleted' ? ' undeleted'
-                      : isMissing                ? ' missing'
-                      :                           '';
-      cell.className  = 'vgrid-cell' + statusCls;
+      const { cls } = _videoStatus(v);
+      cell.className  = `vgrid-cell${cls !== 'up' ? ' ' + cls : ''}`;
       cell.dataset.videoId = v.video_id;
       const id        = esc(v.video_id);
       const viewsHtml = v.view_count != null
@@ -4935,15 +4922,7 @@
     _modalLoaded += batch.length;
 
     const html = batch.map(v => {
-      const isMissing   = v.status === 'up' && v.pending_deletion_count > 0;
-      const statusLabel = v.status === 'deleted'   ? 'Deleted'
-                        : v.status === 'undeleted' ? 'Restored'
-                        : isMissing                ? 'Missing'
-                        :                           'Active';
-      const statusCls   = v.status === 'deleted'   ? 'deleted'
-                        : v.status === 'undeleted' ? 'undeleted'
-                        : isMissing                ? 'missing'
-                        :                           'up';
+      const { cls: statusCls, label: statusLabel } = _videoStatus(v);
       return `<div class="video-row vcols" data-video-id="${esc(v.video_id)}">
         ${_thumbCell(v)}
         <div style="display:flex;align-items:flex-start;gap:4px;min-width:0">
