@@ -988,6 +988,8 @@ function setTrackingView(view) {
   renderUsers();
   renderSounds();
   _placeGlider(document.getElementById('tvUsers').closest('.filter-pills'));
+  const activeControls = document.getElementById(view === 'sounds' ? 'soundControls' : 'userControls');
+  activeControls.querySelectorAll('.filter-pills').forEach(_placeGlider);
 }
 
 function onTrackingSearch(val) {
