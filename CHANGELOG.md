@@ -14,16 +14,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Mobile smart add bar: single unified input above the stats panel that auto-detects whether the value is a TikTok username, sound ID, or sound URL, and routes to the correct tracking endpoint; includes a Paste button; replaces the separate "Track a user" and "Track a sound" forms on mobile
 - User and sound modal: column headers are sticky and scroll horizontally in sync with the video rows on mobile
 - User and sound modal: toolbar collapses on mobile to a single row (view toggle, post count, Profile History); filter pills expand via a "Filters" toggle button
-
-### Added
 - Sound card grid: Tracking filter pills (All / Active / Inactive) matching the Users grid; inactive cards dimmed
 - Sound card grid: tracking toggle on each card, matching user cards
 - Sound modal toolbar: video search (ID or description), matching the user modal
 - Sound modal header: comment/notes field saved on blur, matching the user modal
+- Sound modal: list/grid view toggle, matching the user modal; grid view uses the same infinite-scroll thumbnail renderer
 
 ### Changed
 - Recent entries: detail text shows the full video ID instead of a truncated value
 - `templates/index.html` internal consolidation (no functional changes): 18 duplicated modal functions replaced by 9 parameterised engine functions; shared CSS base classes (`.modal-base`, `.label-caps`) extracted; inline styles moved to stylesheet; JS helpers (`_cmp`, `_attachSentinel`, `_trackingBadge`, etc.) extracted to module scope; `apiJSON` adds `Content-Type` only when a body is present
+- `templates/index.html` split into `static/style.css` and `static/app.js`; HTML template reduced from ~5000 to 640 lines
 - User modal: opens in grid view by default on mobile; switches to list view automatically when a specific video needs to be highlighted
 - User modal header: compact layout on mobile with avatar and name on one row; handle, ID, bio, and stats below
 - Bio in user modal: collapsed to a single truncated line by default; tap to expand inline, tap again to collapse
@@ -39,6 +39,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Filter pills in user/sound modal toolbar no longer stretch to fill the full row width on mobile
 - Clicking a column header to sort no longer resets the horizontal scroll position in video modals
 - Filter pills (All/Active/etc.) now correctly show their active state when the filter row is first expanded on mobile
+- Sound catalog filter/sort controls were never visible when switching to the Sounds tab; switching tabs now also hides the user filter bar without reserving its layout space
 
 ### Performance
 - Recent activity panel: `_recentDate` pre-captures the current time once per render batch instead of once per entry
