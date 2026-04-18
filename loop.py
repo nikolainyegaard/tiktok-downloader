@@ -658,9 +658,21 @@ async def _process_all_users(users: list[dict]) -> int:
                     _logd(f"  [{user['tiktok_id']}] bot detection: {exc}")
                     _log(f"  Bot detected -- resetting session and retrying @{user['username']}")
                     if not await _make_session(api):
+                        if not bot_restart_done:
+                            bot_restart_done  = True
+                            total_completed  += completed
+                            start_idx         = idx  # retry from this user with fresh browser
+                            cooldown_pending  = True
+                            break_for_restart = True
+                            _log(
+                                f"Session reset failed -- cooling down"
+                                f" {_BOT_COOLDOWN_SLEEP // 60} min, then restarting"
+                                f" ({total_completed}/{total} users so far)"
+                            )
+                            break
                         _log(
-                            f"Aborting loop -- session reset failed after"
-                            f" {total_completed + completed}/{total} users"
+                            f"Aborting loop -- session unrecoverable after cool-down"
+                            f" ({total_completed + completed}/{total} users)"
                         )
                         return total_completed + completed
                     try:
