@@ -195,7 +195,7 @@ async def process_single_user(
         # deletion tracking of any previously-downloaded videos still runs.
         if not item_list_map and is_private is True:
             if not (info.get("relation") or 0) & 1:
-                log(f"  Private account, cannot be accessed -- skipping")
+                log(f"  Private account, cannot be accessed")
                 db.update_user_privacy_status(tiktok_id, "private_blocked")
                 return _profile_ok
 
