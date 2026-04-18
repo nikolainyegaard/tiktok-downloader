@@ -79,10 +79,9 @@ async def get_user_info(api, username: str | None = None,
     s = data.get("userInfo", {}).get("stats", {})
 
     if not u.get("id"):
-        ident = f"@{username}" if username else f"sec_uid={sec_uid}"
         status_code = data.get("statusCode")
-        status_info = f", statusCode={status_code}" if status_code else ""
-        raise ValueError(f"No user data returned for {ident}{status_info}")
+        status_info = f" (statusCode={status_code})" if status_code else ""
+        raise ValueError(f"No user data returned{status_info}")
 
     return {
         "tiktok_id":       u.get("id"),

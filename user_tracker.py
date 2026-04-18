@@ -15,17 +15,16 @@ from tiktok_api import (get_user_info, get_user_videos, get_user_videos_with_sta
 from downloader import download_video, download_photos, rename_user_folder
 from thumbnailer import cache_avatar, generate_thumbnail
 
-_CONFIRM_THRESHOLD             = DELETION_CONFIRM_THRESHOLD
-_MAX_BOT_FAILURES              = 3
-_PROFILE_FAIL_QUIET_THRESHOLD  = 5
-_PROFILE_FAIL_SLEEP            = 15  # seconds to sleep after a profile fetch failure
-_RATE_LIMIT_THRESHOLD          = 3   # consecutive profile failures before suspecting rate limit
-_RATE_LIMIT_SLEEP              = 180  # seconds to pause on suspected rate limit (3 min)
-_BOT_COOLDOWN_SLEEP            = 600  # seconds to cool down before full browser restart (10 min)
+_CONFIRM_THRESHOLD            = DELETION_CONFIRM_THRESHOLD
+_BOT_SLEEP_1                  = 300  # seconds after first bot detection (5 min)
+_BOT_SLEEP_2                  = 600  # seconds after second bot detection (10 min)
+_PROFILE_FAIL_QUIET_THRESHOLD = 5
+_PROFILE_FAIL_SLEEP           = 30   # seconds to sleep before retrying a failed profile fetch
+_BOT_COOLDOWN_SLEEP           = 600  # seconds for full browser restart on session creation failure
 
 
 class _BotDetectedError(Exception):
-    """Raised when TikTok detects the session as a bot. Triggers a session reset."""
+    """Raised when TikTok detects the session as a bot. Triggers a full session restart."""
 
 
 def _is_bot_error(exc: Exception) -> bool:
@@ -66,104 +65,107 @@ async def process_single_user(
         # Best sec_uid we have: from DB initially, refreshed if profile fetch returns a newer one
         sec_uid = user.get("sec_uid")
 
-        _was_banned  = user.get("account_status") == "banned"
-        _profile_ok  = False  # set True on any valid TikTok response (success or ban)
+        _was_banned = user.get("account_status") == "banned"
+        _profile_ok = False  # set True on any valid TikTok response (success or ban)
 
-        try:
-            # If sec_uid is known, resolve purely by secUid (username not needed).
-            # For new users (no sec_uid yet), fall back to username lookup.
-            info = await get_user_info(
-                api,
-                username=None if sec_uid else user["username"],
-                sec_uid=sec_uid,
-            )
+        for _attempt in range(2):
+            try:
+                # If sec_uid is known, resolve purely by secUid (username not needed).
+                # For new users (no sec_uid yet), fall back to username lookup.
+                info = await get_user_info(
+                    api,
+                    username=None if sec_uid else user["username"],
+                    sec_uid=sec_uid,
+                )
 
-            # Account recovered from a ban: restore all ban-deleted videos.
-            if _was_banned:
-                restored = db.restore_banned_videos(tiktok_id)
-                db.set_user_account_status(tiktok_id, "active")
-                log(f"  Account restored: ban cleared, {_npost(restored)} re-activated")
+                # Account recovered from a ban: restore all ban-deleted videos.
+                if _was_banned:
+                    restored = db.restore_banned_videos(tiktok_id)
+                    db.set_user_account_status(tiktok_id, "active")
+                    log(f"  Account restored: ban cleared, {_npost(restored)} re-activated")
 
-            # Record profile field changes before overwriting stored values.
-            # Skip bio detection if the account was private_blocked last run: the bio
-            # is hidden from us, so a missing bio just means no access, not a real change.
-            # private_accessible accounts (yellow pill) have accessible bios -- track normally.
-            _bio_blocked = user.get("privacy_status") == "private_blocked"
-            _is_private_now = info.get("is_private", False)
-            _field_labels = {"username": "Username", "display_name": "Display name", "bio": "Bio"}
-            _profile_fields = {
-                "username":     (user.get("username"),     info.get("username")),
-                "display_name": (user.get("display_name"), info.get("display_name")),
-                "bio":          (user.get("bio"),          info.get("bio")),
-            }
-            for _field, (_old, _new) in _profile_fields.items():
-                if _field == "bio" and _bio_blocked:
-                    continue
-                if _new is not None and _new != _old:
-                    db.record_profile_change(tiktok_id, _field, _old)
-                    if _field != "username":  # username gets its own log line below
-                        log(f"  Profile change: {_field_labels[_field]} updated")
+                # Record profile field changes before overwriting stored values.
+                # Skip bio detection if the account was private_blocked last run: the bio
+                # is hidden from us, so a missing bio just means no access, not a real change.
+                # private_accessible accounts (yellow pill) have accessible bios -- track normally.
+                _bio_blocked    = user.get("privacy_status") == "private_blocked"
+                _is_private_now = info.get("is_private", False)
+                _field_labels   = {"username": "Username", "display_name": "Display name", "bio": "Bio"}
+                _profile_fields = {
+                    "username":     (user.get("username"),     info.get("username")),
+                    "display_name": (user.get("display_name"), info.get("display_name")),
+                    "bio":          (user.get("bio"),          info.get("bio")),
+                }
+                for _field, (_old, _new) in _profile_fields.items():
+                    if _field == "bio" and _bio_blocked:
+                        continue
+                    if _new is not None and _new != _old:
+                        db.record_profile_change(tiktok_id, _field, _old)
+                        if _field != "username":  # username gets its own log line below
+                            log(f"  Profile change: {_field_labels[_field]} updated")
 
-            db.update_user_info(
-                tiktok_id,
-                info["username"],
-                info["display_name"],
-                info["bio"],
-                info["follower_count"],
-                info["following_count"],
-                info["video_count"],
-                sec_uid=info.get("sec_uid"),
-                verified=int(info.get("verified", False)),
-                avatar_url=info.get("avatar_url"),
-                raw_user_data=info.get("_raw_user_data"),
-            )
-            db.reset_profile_fail_count(tiktok_id)
-            _profile_ok  = True
-            username     = info["username"]
-            display_name = info["display_name"] or username
-            if info.get("sec_uid"):
-                sec_uid = info["sec_uid"]
-            if username != user["username"]:
-                old_username = user["username"]
-                log(f"  Username changed: @{old_username} → @{username}")
-                if rename_user_folder(old_username, username):
-                    db.rename_user_video_paths(tiktok_id, old_username, username)
-                    log(f"  Folder renamed and DB paths updated")
-            is_private = _is_private_now
-            if info.get("avatar_url"):
-                if cache_avatar(tiktok_id, info["avatar_url"]) == "changed":
-                    log(f"  Profile change: avatar changed")
-        except UserBannedException:
-            _profile_ok = True  # TikTok responded with valid data; not a rate limit failure
-            db.reset_profile_fail_count(tiktok_id)  # TikTok responded; not a fetch failure
-            if _was_banned:
-                log(f"  No changes (still banned)")
-                banned_at = user.get("banned_at")
-                if (banned_at
-                        and time.time() - banned_at >= 14 * 86400
-                        and user.get("tracking_enabled", 1)):
-                    db.set_user_tracking_enabled(tiktok_id, False)
-                    log(f"  Banned for 14+ consecutive days -- tracking disabled")
-            else:
-                log(f"  Account banned/removed (TikTok 10202), marking as banned")
-                db.set_user_account_status(tiktok_id, "banned")
-                n = db.ban_user_videos(tiktok_id)
-                if n:
-                    log(f"  {_npost(n)} marked deleted (user_banned)")
-            return _profile_ok
-        except Exception as e:
-            if _is_bot_error(e):
-                raise _BotDetectedError(str(e)) from e
-            _fail_count = db.increment_profile_fail_count(tiktok_id)
-            if _fail_count < _PROFILE_FAIL_QUIET_THRESHOLD:
-                log(f"  Failed to fetch profile info: {e}")
-            else:
-                logd(f"  [{tiktok_id}] profile still failing (#{_fail_count}): {e}")
-            # Brief cooldown so the next user's profile fetch doesn't immediately
-            # hit the same rate-limited endpoint
-            await asyncio.sleep(_PROFILE_FAIL_SLEEP)
-            username     = user["username"]
-            display_name = user.get("display_name") or username
+                db.update_user_info(
+                    tiktok_id,
+                    info["username"],
+                    info["display_name"],
+                    info["bio"],
+                    info["follower_count"],
+                    info["following_count"],
+                    info["video_count"],
+                    sec_uid=info.get("sec_uid"),
+                    verified=int(info.get("verified", False)),
+                    avatar_url=info.get("avatar_url"),
+                    raw_user_data=info.get("_raw_user_data"),
+                )
+                db.reset_profile_fail_count(tiktok_id)
+                _profile_ok  = True
+                username     = info["username"]
+                display_name = info["display_name"] or username
+                if info.get("sec_uid"):
+                    sec_uid = info["sec_uid"]
+                if username != user["username"]:
+                    old_username = user["username"]
+                    log(f"  Username changed: @{old_username} → @{username}")
+                    if rename_user_folder(old_username, username):
+                        db.rename_user_video_paths(tiktok_id, old_username, username)
+                        log(f"  Folder renamed and DB paths updated")
+                is_private = _is_private_now
+                if info.get("avatar_url"):
+                    if cache_avatar(tiktok_id, info["avatar_url"]) == "changed":
+                        log(f"  Profile change: avatar changed")
+                break  # profile fetch succeeded; exit retry loop
+            except UserBannedException:
+                _profile_ok = True  # TikTok responded with valid data; not a rate limit failure
+                db.reset_profile_fail_count(tiktok_id)
+                if _was_banned:
+                    log(f"  No changes (still banned)")
+                    banned_at = user.get("banned_at")
+                    if (banned_at
+                            and time.time() - banned_at >= 14 * 86400
+                            and user.get("tracking_enabled", 1)):
+                        db.set_user_tracking_enabled(tiktok_id, False)
+                        log(f"  Banned for 14+ consecutive days -- tracking disabled")
+                else:
+                    log(f"  Account banned/removed (TikTok 10202), marking as banned")
+                    db.set_user_account_status(tiktok_id, "banned")
+                    n = db.ban_user_videos(tiktok_id)
+                    if n:
+                        log(f"  {_npost(n)} marked deleted (user_banned)")
+                return _profile_ok
+            except Exception as e:
+                if _is_bot_error(e):
+                    raise _BotDetectedError(str(e)) from e
+                if _attempt == 0:
+                    log(f"  Profile fetch failed, retrying in {_PROFILE_FAIL_SLEEP}s")
+                    await asyncio.sleep(_PROFILE_FAIL_SLEEP)
+                else:
+                    _fail_count = db.increment_profile_fail_count(tiktok_id)
+                    if _fail_count < _PROFILE_FAIL_QUIET_THRESHOLD:
+                        log(f"  Profile fetch failed after retry: {e}")
+                    else:
+                        logd(f"  [{tiktok_id}] profile still failing (#{_fail_count}): {e}")
+                    username     = user["username"]
+                    display_name = user.get("display_name") or username
 
         if not fetch_videos:
             log(f"  Video fetch skipped (tracking disabled for @{username})")
@@ -365,7 +367,8 @@ async def process_all_users(
 
         Calling create_sessions() again resets the Playwright browser context without
         relaunching the browser process, so this is cheap relative to a full TikTokApi()
-        instantiation. Used both for the initial session and after bot detection.
+        instantiation. Used for the initial session only; bot detection now exits the
+        TikTokApi context entirely and creates a fresh one via the outer while loop.
         """
         _last_exc: Exception | None = None
         for _attempt in range(2):
@@ -401,41 +404,42 @@ async def process_all_users(
         log(f"Session creation failed after retry: {_last_exc}")
         return False
 
-    # The outer while allows one full browser restart after a bot detection cool-down.
-    # On each iteration a fresh TikTokApi() context (new browser process) is created.
-    # Normal runs complete in one iteration; the restart path is taken at most once.
-    total_completed  = 0
-    start_idx        = 0
-    bot_restart_done = False  # at most one full browser restart per loop run
-    cooldown_pending = False  # sleep BEFORE the next TikTokApi context opens
+    # The outer while loop runs one TikTokApi() context per iteration.
+    # Bot detection exits the current context (closing the browser), sleeps, then
+    # the next iteration opens a fresh browser. Each user gets up to 2 bot-triggered
+    # restarts (_BOT_SLEEP_1 then _BOT_SLEEP_2) before being skipped.
+    total_completed       = 0
+    start_idx             = 0
+    bot_retry_counts: dict[int, int] = {}  # {user_idx: restart_count} -- per-user bot retries
+    session_create_failed = False   # True if the most recent _make_session call failed
+    cooldown_pending      = False
+    cooldown_sleep        = 0
 
     while start_idx < total:
         if cooldown_pending:
-            log(f"Cooling down {_BOT_COOLDOWN_SLEEP // 60} min before restarting session...")
-            await asyncio.sleep(_BOT_COOLDOWN_SLEEP)
+            log(f"Cooling down {cooldown_sleep // 60} min before restarting session...")
+            await asyncio.sleep(cooldown_sleep)
             cooldown_pending = False
+            cooldown_sleep   = 0
 
         async with TikTokApi() as api:
             if not await _make_session(api):
-                if not bot_restart_done:
-                    bot_restart_done = True
-                    cooldown_pending = True
+                if not session_create_failed:
+                    session_create_failed = True
+                    cooldown_pending      = True
+                    cooldown_sleep        = _BOT_COOLDOWN_SLEEP
                     log(
-                        f"Session failed (bot-detected at startup) -- cooling down"
-                        f" {_BOT_COOLDOWN_SLEEP // 60} min, then restarting"
-                        f" ({total_completed}/{total} users so far)"
+                        f"Session failed -- cooling down {_BOT_COOLDOWN_SLEEP // 60} min,"
+                        f" then restarting ({total_completed}/{total} users so far)"
                     )
                     continue
-                log(
-                    f"Aborting loop -- session unrecoverable after cool-down"
-                    f" ({total_completed}/{total} users)"
-                )
+                log(f"Aborting loop -- session unrecoverable ({total_completed}/{total} users)")
                 return total_completed
 
-            completed                    = 0
-            consecutive_bot_failures     = 0
-            consecutive_profile_failures = 0
-            break_for_restart            = False
+            session_create_failed = False
+
+            completed         = 0
+            break_for_restart = False
 
             for idx in range(start_idx, total):
                 user = users[idx]
@@ -445,7 +449,7 @@ async def process_all_users(
                 progress        = f"{idx + 1}/{total}"
                 _user_processed = False
                 try:
-                    profile_ok = await process_single_user(
+                    await process_single_user(
                         user, api, cookies,
                         fetch_videos=fetch_videos,
                         progress=progress,
@@ -453,80 +457,27 @@ async def process_all_users(
                         logd=logd,
                         set_current_user=set_current_user,
                     )
-                    consecutive_bot_failures = 0
                     _user_processed = True
-                    if profile_ok:
-                        consecutive_profile_failures = 0
-                    else:
-                        consecutive_profile_failures += 1
-                        if consecutive_profile_failures >= _RATE_LIMIT_THRESHOLD:
-                            log(
-                                f"Rate limit suspected ({consecutive_profile_failures} consecutive"
-                                f" profile failures) -- pausing {_RATE_LIMIT_SLEEP // 60} min"
-                            )
-                            await asyncio.sleep(_RATE_LIMIT_SLEEP)
-                            consecutive_profile_failures = 0
-                            log("Resuming after rate limit pause")
                 except _BotDetectedError as exc:
-                    consecutive_profile_failures = 0
                     logd(f"  [{user['tiktok_id']}] bot detection: {exc}")
-                    log(f"  Bot detected -- resetting session and retrying @{user['username']}")
-                    if not await _make_session(api):
-                        if not bot_restart_done:
-                            bot_restart_done  = True
-                            total_completed  += completed
-                            start_idx         = idx  # retry from this user with fresh browser
-                            cooldown_pending  = True
-                            break_for_restart = True
-                            log(
-                                f"Session reset failed -- cooling down"
-                                f" {_BOT_COOLDOWN_SLEEP // 60} min, then restarting"
-                                f" ({total_completed}/{total} users so far)"
-                            )
-                            break
+                    _retry_count = bot_retry_counts.get(idx, 0)
+                    if _retry_count < 2:
+                        _sleep = _BOT_SLEEP_1 if _retry_count == 0 else _BOT_SLEEP_2
+                        bot_retry_counts[idx] = _retry_count + 1
+                        total_completed  += completed
+                        start_idx         = idx
+                        cooldown_pending  = True
+                        cooldown_sleep    = _sleep
+                        break_for_restart = True
                         log(
-                            f"Aborting loop -- session unrecoverable after cool-down"
-                            f" ({total_completed + completed}/{total} users)"
+                            f"  Bot detected -- closing session,"
+                            f" sleeping {_sleep // 60} min, then restarting"
+                            f" @{user['username']}..."
                         )
-                        return total_completed + completed
-                    try:
-                        profile_ok = await process_single_user(
-                            user, api, cookies,
-                            fetch_videos=fetch_videos,
-                            progress=progress,
-                            log=log,
-                            logd=logd,
-                            set_current_user=set_current_user,
-                        )
-                        consecutive_bot_failures = 0
-                        _user_processed = True
-                    except _BotDetectedError:
-                        consecutive_bot_failures += 1
-                        log(f"  Still bot-detected after reset -- skipping @{user['username']}")
-                        if consecutive_bot_failures >= _MAX_BOT_FAILURES:
-                            if not bot_restart_done:
-                                bot_restart_done  = True
-                                total_completed  += completed
-                                start_idx         = idx  # retry this user with fresh browser
-                                cooldown_pending  = True
-                                break_for_restart = True
-                                log(
-                                    f"Bot detection threshold reached -- cooling down"
-                                    f" {_BOT_COOLDOWN_SLEEP // 60} min, then restarting"
-                                    f" ({total_completed}/{total} users so far)"
-                                )
-                                break
-                            else:
-                                log(
-                                    f"Aborting loop -- session unrecoverable after cool-down"
-                                    f" ({total_completed + completed}/{total} users)"
-                                )
-                                return total_completed + completed
-                    except Exception as exc2:
-                        consecutive_bot_failures = 0
-                        log(f"  @{user['username']} failed after session reset: {exc2}")
+                        break
+                    else:
+                        log(f"  Giving up on @{user['username']} after 2 bot retries -- skipping")
                 except Exception as e:
-                    consecutive_bot_failures = 0
                     log(f"Unhandled error for @{user['username']}: {e}")
                 if _user_processed:
                     completed += 1
