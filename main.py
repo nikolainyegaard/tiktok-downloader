@@ -153,6 +153,23 @@ logging.getLogger("werkzeug").addFilter(_SuppressPolling())
 # caught and logged by the application code in loop.py / sound_tracker.py.
 logging.getLogger("TikTokApi").setLevel(logging.CRITICAL)
 
+# Suppress 'Event loop is closed' noise from asyncio's BaseSubprocessTransport.__del__.
+# Python fires sys.unraisablehook for exceptions raised in __del__ (GC context). After
+# asyncio.run() closes the event loop, Playwright's subprocess transport objects are GC'd
+# and try to close their pipes, which requires calling into the (now-closed) loop. The
+# exception is harmless but produces multi-line tracebacks in the log on every loop run.
+_orig_unraisablehook = sys.unraisablehook
+
+
+def _suppress_loop_closed(unraisable):
+    if (isinstance(unraisable.exc_value, RuntimeError)
+            and "Event loop is closed" in str(unraisable.exc_value)):
+        return
+    _orig_unraisablehook(unraisable)
+
+
+sys.unraisablehook = _suppress_loop_closed
+
 
 def _ts() -> str:
     return f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}]"

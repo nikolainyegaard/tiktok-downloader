@@ -30,6 +30,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Close buttons across all modals unified to a rounded-square style with a CSS-drawn X; consistent size and shape everywhere
 
 ### Fixed
+- Suppress `RuntimeError: Event loop is closed` tracebacks that appeared in the log after each loop run; Playwright subprocess transports clean up during GC after asyncio.run() closes the loop, harmless but noisy
+- Sound loop: retry fetch once with a 15-second delay when the Playwright session times out, instead of skipping the sound for the entire loop run
 - Private filter no longer matches banned users whose privacy_status was set before the ban
 - Reset button now clears the search field in addition to filters and sort
 - Modals no longer allow the underlying page to scroll while open; root cause was `overflow: hidden` being set on `<body>` when `<html>` is the actual scroll container
