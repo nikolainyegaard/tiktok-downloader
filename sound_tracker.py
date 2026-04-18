@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import time
 from typing import Callable
 
@@ -46,14 +47,21 @@ async def process_sound(sound: dict, log: Callable[[str], None]) -> int:
 
     log(f"Processing sound '{label}' ({sound_id})")
 
-    try:
-        ms_token   = get_ms_token()
-        remote_ids = await fetch_sound_video_ids(sound_id, ms_token, CHROME_EXECUTABLE,
-                                                  cookies_flat=get_cookies_flat())
-    except Exception as e:
-        log(f"Failed to fetch posts for sound {sound_id}: {e}")
-        db.update_sound_last_checked(sound_id)
-        return 0
+    remote_ids: list[str] = []
+    for _attempt in range(2):
+        try:
+            ms_token   = get_ms_token()
+            remote_ids = await fetch_sound_video_ids(sound_id, ms_token, CHROME_EXECUTABLE,
+                                                      cookies_flat=get_cookies_flat())
+            break
+        except Exception as e:
+            if _attempt == 0:
+                log(f"Sound '{label}' fetch failed, retrying in 15s: {e}")
+                await asyncio.sleep(15)
+            else:
+                log(f"Failed to fetch posts for sound {sound_id}: {e}")
+                db.update_sound_last_checked(sound_id)
+                return 0
 
     log(f"{_npost(len(remote_ids))} found for sound '{label}'")
 
