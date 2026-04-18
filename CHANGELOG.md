@@ -23,6 +23,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 - User tracking logic extracted from `loop.py` into a new `user_tracker.py` module, mirroring the existing `sound_tracker.py` structure; `loop.py` is now purely scheduler and shared state
 - `process_sound` renamed to `process_single_sound` in `sound_tracker.py` for naming consistency with `process_single_user`
+- Bot detection now retries the same user up to twice before skipping: first retry after resetting the session and sleeping 5 min, second after resetting again and sleeping 10 min; replaces the previous single-retry "still bot-detected, skipping" behavior
+- Profile fetch failures now retry once after a 30-second sleep before falling back to cached username; session-level `consecutive_profile_failures` rate-limit pause removed
+- Error message for empty profile responses shortened to remove the full sec_uid from the exception string
 - Recent entries: detail text shows the full video ID instead of a truncated value
 - `templates/index.html` internal consolidation (no functional changes): 18 duplicated modal functions replaced by 9 parameterised engine functions; shared CSS base classes (`.modal-base`, `.label-caps`) extracted; inline styles moved to stylesheet; JS helpers (`_cmp`, `_attachSentinel`, `_trackingBadge`, etc.) extracted to module scope; `apiJSON` adds `Content-Type` only when a body is present
 - `templates/index.html` split into `static/style.css` and `static/app.js`; HTML template reduced from ~5000 to 640 lines
