@@ -190,18 +190,14 @@ async def process_single_user(
                 log(f"  Video fetch failed, trying fallback...")
                 logd(f"  [{tiktok_id}] item_list error: {e}")
 
-        # Private account with empty item_list: could be no access, or could be
-        # accessible with 0 videos. Use relation & 1 (cookie holder follows them)
-        # as the access signal -- accessible accounts return a full user object
-        # with relation >= 1; inaccessible ones fail before reaching this point.
+        # Inaccessible private account: no relation means we don't follow them.
+        # Accessible private accounts with 0 videos fall through to the diff so
+        # deletion tracking of any previously-downloaded videos still runs.
         if not item_list_map and is_private is True:
-            if (info.get("relation") or 0) & 1:
-                log(f"  Private account with no videos -- accessible (following)")
-                db.update_user_privacy_status(tiktok_id, "private_accessible")
-            else:
-                log(f"  Private account, no accessible videos -- skipping video fetch")
+            if not (info.get("relation") or 0) & 1:
+                log(f"  Private account, cannot be accessed -- skipping")
                 db.update_user_privacy_status(tiktok_id, "private_blocked")
-            return _profile_ok
+                return _profile_ok
 
         if item_list_map:
             log(f"  {_npost(len(item_list_map))} found")
@@ -212,7 +208,9 @@ async def process_single_user(
 
         # ── Fallback: yt-dlp flat extraction ─────────────────────────────────
         # Only runs when item_list returned nothing (failed or no sec_uid).
-        if not item_list_map:
+        # Skipped for accessible private accounts with 0 videos -- yt-dlp cannot
+        # access private content and would incorrectly trigger private_blocked.
+        if not item_list_map and not (is_private and (info.get("relation") or 0) & 1):
             try:
                 ydlp_videos = get_user_videos(tiktok_id, sec_uid=sec_uid,
                                               cookies_path=COOKIES_PATH)
