@@ -819,6 +819,7 @@ def run_user_loop():
 
     _log("=== User loop started ===")
     users      = db.get_all_users()
+    random.shuffle(users)
     _completed = 0
 
     if not users:

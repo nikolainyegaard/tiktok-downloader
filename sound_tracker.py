@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import random
 import time
 from typing import Callable
 
@@ -27,6 +28,7 @@ async def process_all_sounds(log: Callable[[str], None]) -> dict:
     sounds = db.get_all_sounds()
     if not sounds:
         return {"sounds_checked": 0, "new_videos": 0}
+    random.shuffle(sounds)
 
     sounds_checked = 0
     total_new      = 0
