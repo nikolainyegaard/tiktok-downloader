@@ -397,6 +397,10 @@ async def _process_single_user(user: dict, api, cookies: dict,
 
         if item_list_map:
             _log(f"  {_npost(len(item_list_map))} found")
+            if not _profile_ok:
+                # item_list returned data so the session is responsive; the profile
+                # endpoint hiccup should not count toward the rate-limit failure counter
+                _profile_ok = True
 
         # ── Fallback: yt-dlp flat extraction ─────────────────────────────────
         # Only runs when item_list returned nothing (failed or no sec_uid).
