@@ -389,10 +389,13 @@ async def process_all_users(
                 # browser handshake but returns empty sessions when it detects automation.
                 # A quick make_request catches this before the user loop starts so the
                 # bot-detection path triggers immediately rather than after 3 users.
+                # Use a real secUid so TikTok returns a proper response -- empty-param
+                # requests trigger "unexpected status code" noise from the library.
+                _val_sec_uid = next((u.get("sec_uid") for u in users if u.get("sec_uid")), "")
                 try:
                     await api.make_request(
                         url="https://www.tiktok.com/api/user/detail/",
-                        params={"secUid": "", "uniqueId": ""},
+                        params={"secUid": _val_sec_uid, "uniqueId": ""},
                     )
                 except Exception as _val_err:
                     if _is_bot_error(_val_err):
