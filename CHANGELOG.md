@@ -38,6 +38,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Suppress `RuntimeError: Event loop is closed` tracebacks that appeared in the log after each loop run; Playwright subprocess transports clean up during GC after asyncio.run() closes the loop, harmless but noisy
 - Sound loop: retry fetch once with a 15-second delay when the Playwright session times out, instead of skipping the sound for the entire loop run
 - User loop: validate the TikTok session immediately after creation; if bot-detected at startup or after a mid-run reset, trigger the existing cooldown+restart path instead of aborting or cycling through 3 users first
+- Session health check now uses a real secUid from the user list instead of empty params; eliminates "Got an unexpected status code" noise from TikTokApi during session startup
+- Cookie age in settings now shows days instead of hours once the cookie is 24+ hours old
 - User loop: a successful item_list fetch now clears the rate-limit failure counter even when the profile endpoint returned empty; prevents a spurious 3-minute pause when the user-detail API hiccups but videos are accessible
 - User loop: sleep 15 seconds after each profile fetch failure to let the user-detail API recover before the next user hits the same endpoint; prevents cascades of consecutive profile failures
 - User and sound loops: process in random order each run so users and sounds near the end of the alphabetical DB ordering are not systematically skipped when a loop aborts early
