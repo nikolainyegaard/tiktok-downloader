@@ -21,6 +21,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Sound modal: list/grid view toggle, matching the user modal; grid view uses the same infinite-scroll thumbnail renderer
 
 ### Changed
+- Recent panel tables: columns now align consistently across all rows within each section using CSS subgrid; the date column auto-sizes to its widest content and the username column starts flush with it; username centered, date left-aligned, detail right-aligned; same layout applied to the Recent log modal
 - User tracking logic extracted from `loop.py` into a new `user_tracker.py` module, mirroring the existing `sound_tracker.py` structure; `loop.py` is now purely scheduler and shared state
 - `process_sound` renamed to `process_single_sound` in `sound_tracker.py` for naming consistency with `process_single_user`
 - Bot detection now retries the same user up to twice before skipping: first retry after resetting the session and sleeping 5 min, second after resetting again and sleeping 10 min; replaces the previous single-retry "still bot-detected, skipping" behavior

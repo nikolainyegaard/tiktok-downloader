@@ -185,10 +185,18 @@ function _cmp(av, bv, dir) {
   return av < bv ? (dir === 'asc' ? -1 : 1) : av > bv ? (dir === 'asc' ? 1 : -1) : 0;
 }
 
+// Status sort rank: active=0, missing=1, restored=2, deleted=3
+function _statusSortVal(v) {
+  if (v.status === 'deleted')              return 3;
+  if (v.status === 'undeleted')            return 2;
+  if ((v.pending_deletion_count || 0) > 0) return 1;
+  return 0;
+}
+
 function _sortByField(arr, field, dir) {
   return [...arr].sort((a, b) => {
-    const av = a[field] ?? (dir === 'asc' ? Infinity : -Infinity);
-    const bv = b[field] ?? (dir === 'asc' ? Infinity : -Infinity);
+    const av = field === 'status' ? _statusSortVal(a) : a[field] ?? (dir === 'asc' ? Infinity : -Infinity);
+    const bv = field === 'status' ? _statusSortVal(b) : b[field] ?? (dir === 'asc' ? Infinity : -Infinity);
     return dir === 'asc' ? (av < bv ? -1 : av > bv ? 1 : 0)
                          : (av > bv ? -1 : av < bv ? 1 : 0);
   });
@@ -290,7 +298,7 @@ function renderRecent(data) {
   let left = '';
 
   // Recently deleted
-  left += `<div>`;
+  left += `<div class="recent-section">`;
   left += `<div class="recent-section-hdr" style="margin-bottom:2px" onclick="openRecentLog('deletions')" title="View all deleted videos">Recently deleted</div>`;
   if (data.deletions.length) {
     left += data.deletions.map(d => {
@@ -309,7 +317,7 @@ function renderRecent(data) {
   left += `</div>`;
 
   // Recently changed profile
-  left += `<div>`;
+  left += `<div class="recent-section">`;
   left += `<div class="recent-section-hdr" style="margin-bottom:2px" onclick="openRecentLog('profile-changes')" title="View all profile changes">Recently changed profile</div>`;
   if (data.profile_changes.length) {
     left += data.profile_changes.map(p =>
@@ -325,7 +333,7 @@ function renderRecent(data) {
   left += `</div>`;
 
   // Recently banned
-  left += `<div>`;
+  left += `<div class="recent-section">`;
   left += `<div class="recent-section-hdr" style="margin-bottom:2px" onclick="openRecentLog('bans')" title="View all banned accounts">Recently banned</div>`;
   if (data.bans && data.bans.length) {
     const b = data.bans[0];
@@ -344,7 +352,7 @@ function renderRecent(data) {
   // ── Right column: Recently saved ──────────────────────────────────────────
 
   let right = '';
-  right += `<div>`;
+  right += `<div class="recent-section">`;
   right += `<div class="recent-section-hdr" style="margin-bottom:2px" onclick="openRecentLog('saved')" title="View all saved videos">Recently saved</div>`;
   if (data.saved && data.saved.length) {
     right += data.saved.map(g => {
@@ -1600,9 +1608,10 @@ const _SOUND_MODAL_CFG = {
 
 function _mFiltered(cfg, skipSearch = false) {
   let vids = cfg.st.videos;
-  if (cfg.st.filter === 'active')    vids = vids.filter(v => v.status === 'up');
-  if (cfg.st.filter === 'deleted')   vids = vids.filter(v => v.status === 'deleted');
-  if (cfg.st.filter === 'restored')  vids = vids.filter(v => v.status === 'undeleted');
+  if (cfg.st.filter === 'active')   vids = vids.filter(v => v.status === 'up' && !(v.pending_deletion_count > 0));
+  if (cfg.st.filter === 'missing')  vids = vids.filter(v => v.status === 'up' && v.pending_deletion_count > 0);
+  if (cfg.st.filter === 'deleted')  vids = vids.filter(v => v.status === 'deleted');
+  if (cfg.st.filter === 'restored') vids = vids.filter(v => v.status === 'undeleted');
   if (cfg.st.typeFilter === 'video') vids = vids.filter(v => v.type === 'video');
   if (cfg.st.typeFilter === 'photo') vids = vids.filter(v => v.type === 'photo');
   if (!skipSearch && cfg.st.search) {
@@ -1619,13 +1628,14 @@ function _mFiltered(cfg, skipSearch = false) {
 }
 
 function _mRenderToolbar(cfg, vids) {
-  const counts     = { all: 0, active: 0, deleted: 0, restored: 0 };
+  const counts     = { all: 0, active: 0, missing: 0, deleted: 0, restored: 0 };
   const typeCounts = { video: 0, photo: 0 };
   vids.forEach(v => {
     counts.all++;
-    if      (v.status === 'up')        counts.active++;
-    else if (v.status === 'deleted')   counts.deleted++;
-    else if (v.status === 'undeleted') counts.restored++;
+    if      (v.status === 'up' && !(v.pending_deletion_count > 0)) counts.active++;
+    else if (v.status === 'up' &&   v.pending_deletion_count > 0)  counts.missing++;
+    else if (v.status === 'deleted')                               counts.deleted++;
+    else if (v.status === 'undeleted')                             counts.restored++;
     if      (v.type === 'video') typeCounts.video++;
     else if (v.type === 'photo') typeCounts.photo++;
   });
@@ -1662,6 +1672,7 @@ function _mRenderToolbar(cfg, vids) {
     + `<div class="toolbar-filter-wrap${cfg.st.toolbarExpanded ? '' : ' collapsed'}">`
     + `<div class="filter-pills">`
     + pill('all', 'All') + pill('active', 'Active')
+    + (counts.missing  ? pill('missing',  'Missing')  : '')
     + (counts.deleted  ? pill('deleted',  'Deleted')  : '')
     + (counts.restored ? pill('restored', 'Restored') : '')
     + `</div>`
