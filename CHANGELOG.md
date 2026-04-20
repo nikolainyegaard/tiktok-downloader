@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.25.0] - 2026-04-20
+
 ### Added
 - Star button on user and sound cards: outline/grey when unset, solid yellow-orange when starred; persisted in the database
 - Starred filter pill for users (All / Starred) and sounds (All / Starred)
@@ -19,6 +21,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Sound modal toolbar: video search (ID or description), matching the user modal
 - Sound modal header: comment/notes field saved on blur, matching the user modal
 - Sound modal: list/grid view toggle, matching the user modal; grid view uses the same infinite-scroll thumbnail renderer
+- "Missing" filter pill in user and sound modal toolbars; narrows the list to videos absent from the latest scrape but not yet confirmed deleted; "Active" pill now excludes missing videos
 
 ### Changed
 - Recent panel tables: columns now align consistently across all rows within each section using CSS subgrid; the date column auto-sizes to its widest content and the username column starts flush with it; username centered, date left-aligned, detail right-aligned; same layout applied to the Recent log modal
@@ -531,7 +534,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Tracked users, video downloads, deletion detection, username change tracking
 - Docker and Docker Compose support
 
-[Unreleased]: https://github.com/nikolainyegaard/tiktok-downloader/compare/v1.24.0...HEAD
+[Unreleased]: https://github.com/nikolainyegaard/tiktok-downloader/compare/v1.25.0...HEAD
+[1.25.0]: https://github.com/nikolainyegaard/tiktok-downloader/compare/v1.24.0...v1.25.0
 [1.24.0]: https://github.com/nikolainyegaard/tiktok-downloader/compare/v1.23.0...v1.24.0
 [1.23.0]: https://github.com/nikolainyegaard/tiktok-downloader/compare/v1.22.0...v1.23.0
 [1.22.0]: https://github.com/nikolainyegaard/tiktok-downloader/compare/v1.21.1...v1.22.0
